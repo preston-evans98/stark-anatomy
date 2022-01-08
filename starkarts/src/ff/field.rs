@@ -2,9 +2,11 @@ use num::{BigUint, Integer, Num};
 
 // use std::ops::{Add, Div, Mul, Rem, Sub};
 
-use super::field_elem::FieldElement;
+use super::scalar::Scalar;
 
+#[derive(Debug)]
 pub struct DivByZeroError;
+#[derive(Debug)]
 pub struct NoNthRootError;
 
 lazy_static::lazy_static! {
@@ -13,13 +15,13 @@ lazy_static::lazy_static! {
     static ref ORDER: BigUint = BigUint::from_str_radix("664613997892457936451903530140172288", 10).unwrap();
 }
 
-pub trait PrimeField {
-    type Elem: FieldElement;
+pub trait PrimeField: std::fmt::Debug + Clone {
+    type Elem: Scalar;
     fn zero() -> Self::Elem {
-        <Self::Elem as FieldElement>::zero()
+        <Self::Elem as Scalar>::zero()
     }
     fn one() -> Self::Elem {
-        <Self::Elem as FieldElement>::one()
+        <Self::Elem as Scalar>::one()
     }
 
     fn p() -> Self::Elem;
@@ -57,6 +59,7 @@ pub trait PrimeField {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DefaultField;
 impl PrimeField for DefaultField {
     type Elem = BigUint;
@@ -69,7 +72,7 @@ impl PrimeField for DefaultField {
     }
 
     fn primitive_nth_root(n: Self::Elem) -> Result<Self::Elem, NoNthRootError> {
-        if n >= ORDER.clone() || n.is_odd() {
+        if n >= *ORDER || n.is_odd() {
             return Err(NoNthRootError);
         }
         let mut root = ORDER.clone();
