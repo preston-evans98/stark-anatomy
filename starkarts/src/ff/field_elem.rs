@@ -119,28 +119,6 @@ where
             field: std::marker::PhantomData,
         }
     }
-
-    pub fn pow(&self, exponent: usize) -> Self {
-        Self::pow_iter(self.value.clone(), F::one(), exponent)
-    }
-
-    fn pow_iter(value: S, acc: S, exponent: usize) -> Self {
-        match exponent {
-            0 => FieldElement {
-                value: F::one(),
-                field: std::marker::PhantomData,
-            },
-            1 => FieldElement {
-                value: F::multiply(value, acc),
-                field: std::marker::PhantomData,
-            },
-            x if x & 1 == 0 => {
-                Self::pow_iter(F::multiply(value.clone(), value), acc, exponent >> 1)
-            }
-            x if x & 1 == 1 => Self::pow_iter(value.clone(), F::multiply(acc, value), exponent - 1),
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl<S, F> AddAssign<S> for FieldElement<S, F>
@@ -197,7 +175,7 @@ where
 mod tests {
     use num::{BigUint, Num};
 
-    use crate::DefaultField;
+    use crate::{scalar::Scalar, DefaultField};
 
     use super::FieldElement;
 

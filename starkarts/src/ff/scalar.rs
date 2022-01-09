@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Rem, Sub, Neg, AddAssign};
 
-use num::{BigUint,  Zero, One};
+use num::{BigUint,  Zero, One, Integer};
 
 pub trait Scalar:
     // Copy
@@ -35,6 +35,23 @@ pub trait Scalar:
     fn zeros(len: usize) -> Vec<Self> {
         std::iter::repeat(Self::zero()).take(len).collect()
     }
+
+    fn pow(&self, exponent: usize) -> Self {
+        pow_iter(self.clone(), Self::one(), exponent)
+    }
+
+    
+}
+
+fn  pow_iter<S: Scalar>(value: S, acc: S, exponent: usize) -> S {
+    match exponent {
+        0 => S::one(),
+        1 => value * acc,
+        x if x.is_even() => {
+            pow_iter(value.clone() * value, acc, exponent >> 1)
+        }
+        _  => pow_iter(value.clone(), acc*value, exponent - 1),
+    }
 }
 
 impl Scalar for BigUint {
@@ -52,3 +69,22 @@ impl Scalar for BigUint {
 }
 
 pub trait SignedScalar: Scalar + Neg<Output = Self>{}
+
+#[cfg(test)]
+mod tests {
+    use num::{BigUint, Num};
+
+    use crate::{scalar::Scalar, DefaultField};
+
+
+    #[test]
+    fn pow_test() {
+        let elem = BigUint::from(12345u16);
+        let result = elem.pow(2345) %
+        BigUint::from_str_radix("270497897142230380135924736767050121217", 10).unwrap();
+        assert_eq!(
+            result,
+            BigUint::from_str_radix("23520667101221308275390517182423299422", 10).unwrap()
+        )
+    }
+}

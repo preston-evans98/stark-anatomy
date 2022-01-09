@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::{
     scalar::{Scalar, SignedScalar},
     DivByZeroError,
@@ -38,24 +40,75 @@ where
             .expect("Must be able to convert degree of any constructed polynomial to isize")
     }
 
-    pub fn zero() -> Self {
-        Self {
-            coefficients: Vec::new(),
-        }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.degree() == -1
-    }
-
     pub fn leading_coefficient(&self) -> Option<&S> {
         self.coefficients.last()
+    }
+
+    /// Uses polynomial long divison to divide `self` by `divisor`.
+    /// Returns the quotient and remainder.
+    pub fn divide_with_remainder(self, divisor: Self) -> Result<(Self, Self), DivByZeroError> {
+        if divisor.is_zero() {
+            return Err(DivByZeroError);
+        }
+
+        if self.degree() < divisor.degree() {
+            return Ok((Self::zero(), self));
+        }
+
+        let result_degree_upper_bound = (self.degree() - divisor.degree() + 1) as usize;
+
+        let mut remainder = self;
+        let mut quotient_coefs = S::zeros(result_degree_upper_bound);
+        for _ in 0..result_degree_upper_bound {
+            if remainder.degree() < divisor.degree() {
+                break;
+            }
+            let coefficient = remainder
+                .leading_coefficient()
+                .expect("we just checked that the remainder is non-zero")
+                .clone()
+                - divisor
+                    .leading_coefficient()
+                    .expect("divisor must be non-zero")
+                    .clone();
+
+            let shift = (remainder.degree() - divisor.degree()) as usize;
+            let subtrahend = Polynomial::from(
+                std::iter::repeat(S::zero())
+                    .take(shift)
+                    .chain(std::iter::once(coefficient.clone()))
+                    .collect(),
+            ) * divisor.clone();
+            quotient_coefs[shift] = coefficient;
+            remainder = remainder - subtrahend;
+        }
+        let quotient = Polynomial::from(quotient_coefs);
+        return Ok((quotient, remainder));
     }
 
     fn _trim_degree(&mut self) {
         while self.coefficients.ends_with(&[S::zero()]) {
             self.coefficients.pop();
         }
+    }
+}
+
+impl<S: Scalar> Scalar for Polynomial<S> {
+    fn zero() -> Self {
+        Self {
+            coefficients: Vec::new(),
+        }
+    }
+    /// Returns the degree `0` polynomial whose only coefficient is `1`.
+    /// Equivalent to `Polynomial::from(vec![1])`
+    fn one() -> Self {
+        Self {
+            coefficients: vec![S::one()],
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.degree() == -1
     }
 }
 
@@ -97,6 +150,57 @@ where
                 .map(|(l, r)| l + r)
                 .collect(),
         );
+    }
+}
+
+impl<S> std::ops::AddAssign for Polynomial<S>
+where
+    S: Scalar,
+{
+    fn add_assign(&mut self, mut rhs: Self) {
+        if self.is_zero() {
+            *self = rhs;
+            return;
+        } else if rhs.is_zero() {
+            return;
+        }
+
+        if rhs.degree() > self.degree() {
+            std::mem::swap(&mut self.coefficients, &mut rhs.coefficients)
+        }
+        for (c1, c2) in self.coefficients.iter_mut().zip(rhs.coefficients) {
+            *c1 += c2
+        }
+    }
+}
+
+impl<S: Scalar> PartialOrd for Polynomial<S> {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        if self.degree() > rhs.degree() {
+            return Some(Ordering::Greater);
+        }
+        if self.degree() < rhs.degree() {
+            return Some(Ordering::Less);
+        }
+        if self.is_zero() {
+            return Some(Ordering::Equal);
+        }
+        for (self_coef, other_coef) in self
+            .coefficients
+            .iter()
+            .rev()
+            .zip(rhs.coefficients.iter().rev())
+        {
+            match self_coef.partial_cmp(other_coef) {
+                Some(order) => match order {
+                    Ordering::Less => return Some(Ordering::Less),
+                    Ordering::Equal => continue,
+                    Ordering::Greater => return Some(Ordering::Greater),
+                },
+                None => unreachable!(),
+            }
+        }
+        Some(Ordering::Equal)
     }
 }
 
@@ -160,48 +264,26 @@ impl<S> std::ops::Div for Polynomial<S>
 where
     S: Scalar,
 {
-    type Output = Result<(Self, Self), DivByZeroError>;
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        let (quotient, _rem) = self
+            .divide_with_remainder(rhs)
+            .expect("Cannot divide by zero");
+        quotient
+    }
+}
 
-    fn div(self, divisor: Self) -> Self::Output {
-        if divisor.is_zero() {
-            return Err(DivByZeroError);
-        }
+impl<S> std::ops::Rem for Polynomial<S>
+where
+    S: Scalar,
+{
+    type Output = Self;
 
-        if self.degree() < divisor.degree() {
-            return Ok((Self::zero(), self));
-        }
-
-        let result_degree_upper_bound = (self.degree() - divisor.degree() + 1) as usize;
-
-        let mut remainder = self;
-        let mut quotient_coefs = S::zeros(result_degree_upper_bound);
-        for _ in 0..result_degree_upper_bound {
-            if remainder.degree() < divisor.degree() {
-                break;
-            }
-            let coefficient = remainder
-                .leading_coefficient()
-                .expect("we just checked that the remainder is non-zero")
-                .clone()
-                - divisor
-                    .leading_coefficient()
-                    .expect("divisor must be non-zero")
-                    .clone();
-
-            let shift = (remainder.degree() - divisor.degree()) as usize;
-            let subtrahend = Polynomial::from(
-                std::iter::repeat(S::zero())
-                    .take(shift)
-                    .chain(std::iter::once(coefficient.clone()))
-                    .collect(),
-            ) * divisor.clone();
-            quotient_coefs[shift] = coefficient;
-            remainder = remainder - subtrahend;
-        }
-        let quotient = Polynomial::from(quotient_coefs);
-
-        // TODO: remove
-        return Ok((quotient, remainder));
+    fn rem(self, rhs: Self) -> Self::Output {
+        let (_quotient, rem) = self
+            .divide_with_remainder(rhs)
+            .expect("Cannot divide by zero");
+        rem
     }
 }
 
