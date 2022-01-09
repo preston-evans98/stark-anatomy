@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Rem, Sub, Neg};
+use std::ops::{Add, Div, Mul, Rem, Sub, Neg, AddAssign};
 
 use num::{BigUint,  Zero, One};
 
@@ -11,6 +11,7 @@ pub trait Scalar:
     + Mul<Output = Self>
     + Sub<Output = Self>
     + Add<Output = Self>
+    + AddAssign
     + Rem<Output = Self>
     + std::fmt::Debug
 {
@@ -30,6 +31,10 @@ pub trait Scalar:
         }
         (old_s, old_t, old_r)
     }
+
+    fn zeros(len: usize) -> Vec<Self> {
+        std::iter::repeat(Self::zero()).take(len).collect()
+    }
 }
 
 impl Scalar for BigUint {
@@ -46,4 +51,4 @@ impl Scalar for BigUint {
 	}
 }
 
-pub trait SignedScalar: Scalar + std::ops::Neg<Output = Self>{}
+pub trait SignedScalar: Scalar + Neg<Output = Self>{}
