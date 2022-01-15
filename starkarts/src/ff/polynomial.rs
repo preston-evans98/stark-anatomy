@@ -40,10 +40,12 @@ where
     /// Returns the degree of the polynomial.
     /// The degree of the zero polynomial is defined to be -1
     pub fn degree(&self) -> isize {
-        self.coefficients
+        let len: isize = self
+            .coefficients
             .len()
             .try_into()
-            .expect("Must be able to convert degree of any constructed polynomial to isize")
+            .expect("Must be able to convert degree of any constructed polynomial to isize");
+        len - 1
     }
 
     /// Returns the coefficient of the highest degree term
@@ -468,8 +470,15 @@ mod tests {
     #[test]
     fn test_scale() {
         let a = Polynomial::from(vec![1, 2, 3]);
-        let b = a.evaluate(10);
         let c = a.scale(2).evaluate(10);
         assert_eq!(a.evaluate(20), c)
+    }
+
+    #[test]
+    fn test_degree() {
+        let a = Polynomial::from_ref(&[1, 2, 3]);
+        let b: Polynomial<u32> = Polynomial::zero();
+        assert_eq!(a.degree(), 2);
+        assert_eq!(b.degree(), -1);
     }
 }
