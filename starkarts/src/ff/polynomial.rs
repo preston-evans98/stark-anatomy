@@ -135,6 +135,38 @@ where
         Ok(acc)
     }
 
+    pub fn zeroifier_domain(domain: Vec<S>) -> Self {
+        let x = Self::from(vec![S::zero(), S::one()]);
+        let mut acc = Self::from(vec![S::one()]);
+        for d in domain {
+            acc = acc * (x.clone() - Polynomial::from(vec![d]));
+        }
+        return acc;
+    }
+
+    pub fn scale(&self, factor: S) -> Self {
+        Self::from(
+            self.coefficients
+                .iter()
+                .enumerate()
+                .map(|(i, coef)| factor.clone().pow(i) * coef.clone())
+                .collect(),
+        )
+    }
+
+    pub fn are_colinear(points: Vec<(S, S)>) -> bool {
+        let mut domain = Vec::with_capacity(points.len());
+        let mut range = Vec::with_capacity(points.len());
+        for (x, y) in points {
+            domain.push(x);
+            range.push(y);
+        }
+        Self::interpolate_domain(domain, range)
+            .expect("Provided the same number of x and y coordinates")
+            .degree()
+            == 1
+    }
+
     fn _trim_degree(&mut self) {
         while self.coefficients.ends_with(&[S::zero()]) {
             self.coefficients.pop();
@@ -389,7 +421,7 @@ mod tests {
 
     #[test]
     fn test_interpolate() {
-        let mut domain: Vec<u32> = vec![0, 1, 2, 5];
+        let domain: Vec<u32> = vec![0, 1, 2, 5];
         let values = vec![2u32, 3, 12, 147];
 
         let domain: Vec<FieldElement<BigInt, DefaultField>> = domain
@@ -412,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_interpolate_again() {
-        let mut domain: Vec<u32> = vec![0, 1, 2];
+        let domain: Vec<u32> = vec![0, 1, 2];
         let values = vec![1u32, 2, 5];
 
         let domain: Vec<FieldElement<BigInt, DefaultField>> = domain
@@ -431,5 +463,13 @@ mod tests {
             p.evaluate(<FieldElement<BigInt, DefaultField>>::new(35u32.into())),
             <FieldElement<BigInt, DefaultField>>::new(1226.into())
         )
+    }
+
+    #[test]
+    fn test_scale() {
+        let a = Polynomial::from(vec![1, 2, 3]);
+        let b = a.evaluate(10);
+        let c = a.scale(2).evaluate(10);
+        assert_eq!(a.evaluate(20), c)
     }
 }
