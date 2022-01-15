@@ -1,6 +1,8 @@
-use num::{BigUint, Integer, Num};
+use num::{BigInt, Integer, Num};
 
 // use std::ops::{Add, Div, Mul, Rem, Sub};
+
+use crate::scalar::SimpleNum;
 
 use super::scalar::Scalar;
 
@@ -10,18 +12,18 @@ pub struct DivByZeroError;
 pub struct NoNthRootError;
 
 lazy_static::lazy_static! {
-    static ref P: BigUint = BigUint::from_str_radix("270497897142230380135924736767050121217", 10).unwrap();
-    static ref GENERATOR: BigUint = BigUint::from_str_radix("85408008396924667383611388730472331217", 10).unwrap();
-    static ref ORDER: BigUint = BigUint::from_str_radix("664613997892457936451903530140172288", 10).unwrap();
+    static ref P: BigInt = BigInt::from_str_radix("270497897142230380135924736767050121217", 10).unwrap();
+    static ref GENERATOR: BigInt = BigInt::from_str_radix("85408008396924667383611388730472331217", 10).unwrap();
+    static ref ORDER: BigInt = BigInt::from_str_radix("664613997892457936451903530140172288", 10).unwrap();
 }
 
 pub trait PrimeField: std::fmt::Debug + Clone {
     type Elem: Scalar;
     fn zero() -> Self::Elem {
-        <Self::Elem as Scalar>::zero()
+        <Self::Elem as SimpleNum>::zero()
     }
     fn one() -> Self::Elem {
-        <Self::Elem as Scalar>::one()
+        <Self::Elem as SimpleNum>::one()
     }
 
     fn p() -> Self::Elem;
@@ -45,6 +47,7 @@ pub trait PrimeField: std::fmt::Debug + Clone {
         Self::p() - value
     }
 
+    /// Computes the multiplicative inverse of value
     fn inverse(value: Self::Elem) -> Self::Elem {
         let (a, _, _) = Self::Elem::extended_gcd(value, Self::p());
         a
@@ -62,7 +65,7 @@ pub trait PrimeField: std::fmt::Debug + Clone {
 #[derive(Debug, Clone)]
 pub struct DefaultField;
 impl PrimeField for DefaultField {
-    type Elem = BigUint;
+    type Elem = BigInt;
     fn p() -> Self::Elem {
         P.clone()
     }
@@ -85,6 +88,26 @@ impl PrimeField for DefaultField {
     }
 
     fn sample(random_bytes: &[u8]) -> Self::Elem {
-        BigUint::from_bytes_be(random_bytes) % Self::p()
+        BigInt::from_bytes_be(num::bigint::Sign::Plus, random_bytes) % Self::p()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use num::{BigInt, Num};
+
+    use crate::PrimeField;
+
+    use super::DefaultField;
+
+    #[test]
+    fn test_inverse() {
+        let one: BigInt = 1.into();
+        let a: BigInt = DefaultField::p() - one;
+        assert_eq!(
+            a.clone(),
+            BigInt::from_str_radix("270497897142230380135924736767050121216", 10).unwrap()
+        );
+        assert_eq!(DefaultField::inverse(a), 1.into());
     }
 }

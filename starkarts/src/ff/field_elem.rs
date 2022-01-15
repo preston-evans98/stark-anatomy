@@ -1,14 +1,27 @@
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub};
+use std::{
+    fmt::Debug,
+    ops::{Add, AddAssign, Div, Mul, Neg, Rem, Sub},
+};
 
-use crate::{scalar::Scalar, PrimeField};
+use crate::{
+    scalar::{Scalar, SimpleNum},
+    PrimeField,
+};
 
-#[derive(Debug, Clone)]
+/// Represents an element of a finite field mod a prime
+#[derive(Clone)]
 pub struct FieldElement<S, F> {
     value: S,
     field: std::marker::PhantomData<F>,
 }
 
-impl<S, F> Scalar for FieldElement<S, F>
+impl<S: Debug, F> Debug for FieldElement<S, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", &self.value))
+    }
+}
+
+impl<S, F> SimpleNum for FieldElement<S, F>
 where
     S: Scalar,
     F: PrimeField<Elem = S>,
@@ -23,6 +36,18 @@ where
 
     fn one() -> Self {
         FieldElement::new(S::one())
+    }
+}
+
+impl<S, F> Scalar for FieldElement<S, F>
+where
+    S: Scalar,
+    F: PrimeField<Elem = S>,
+{
+    /// Override the default Scalar `inverse` implementation with
+    /// the Finite Field's inverse operation.
+    fn inverse(&self) -> Self {
+        FieldElement::new(F::inverse(self.value.clone()))
     }
 }
 
@@ -114,6 +139,12 @@ where
     F: PrimeField<Elem = S>,
 {
     pub fn new(value: S) -> Self {
+        // This code is necessary because some implementations of modulus
+        // Do not handle negatives correctly. TODO: Remove
+        let mut value = value % F::p();
+        if value < S::zero() {
+            value = F::p() + value
+        }
         Self {
             value,
             field: std::marker::PhantomData,
@@ -173,19 +204,19 @@ where
 
 #[cfg(test)]
 mod tests {
-    use num::{BigUint, Num};
+    use num::{BigInt, Num};
 
-    use crate::{scalar::Scalar, DefaultField};
+    use crate::{scalar::SimpleNum, DefaultField};
 
     use super::FieldElement;
 
     #[test]
     fn pow_test() {
-        let elem: FieldElement<BigUint, DefaultField> = FieldElement::new(12345u16.into());
+        let elem: FieldElement<BigInt, DefaultField> = FieldElement::new(12345u16.into());
         let result = elem.pow(2345);
         assert_eq!(
             result.value,
-            BigUint::from_str_radix("23520667101221308275390517182423299422", 10).unwrap()
+            BigInt::from_str_radix("23520667101221308275390517182423299422", 10).unwrap()
         )
     }
 }

@@ -1,9 +1,15 @@
 use std::cmp::Ordering;
 
 use crate::{
-    scalar::{Scalar, SignedScalar},
+    scalar::{Scalar, SignedScalar, SimpleNum},
     DivByZeroError,
 };
+
+#[derive(Debug)]
+pub enum InterpolationError {
+    MismatchedCoordinateLists,
+    NoPointsProvided,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 /// A polynomial, represented as a list of coefficients, with the lowest degree coefficient first.
@@ -40,13 +46,14 @@ where
             .expect("Must be able to convert degree of any constructed polynomial to isize")
     }
 
+    /// Returns the coefficient of the highest degree term
     pub fn leading_coefficient(&self) -> Option<&S> {
         self.coefficients.last()
     }
 
     /// Uses polynomial long divison to divide `self` by `divisor`.
     /// Returns the quotient and remainder.
-    pub fn divide_with_remainder(self, divisor: Self) -> Result<(Self, Self), DivByZeroError> {
+    pub fn long_divide(self, divisor: Self) -> Result<(Self, Self), DivByZeroError> {
         if divisor.is_zero() {
             return Err(DivByZeroError);
         }
@@ -86,6 +93,48 @@ where
         return Ok((quotient, remainder));
     }
 
+    /// A naive implementation of evaluation at a point
+    pub fn evaluate(&self, point: S) -> S {
+        let mut x_i = S::one();
+        let mut value = S::zero();
+        for c in self.coefficients.iter() {
+            value = value + c.clone() * x_i.clone();
+            x_i = x_i * point.clone();
+        }
+        value
+    }
+
+    pub fn evaluate_domain(&self, domain: Vec<S>) -> Vec<S> {
+        domain.into_iter().map(|p| self.evaluate(p)).collect()
+    }
+
+    /// Use lagrange interpolation to create a polynomial from lists of X and Y coordinates
+    pub fn interpolate_domain(domain: Vec<S>, values: Vec<S>) -> Result<Self, InterpolationError> {
+        if domain.len() != values.len() {
+            return Err(InterpolationError::MismatchedCoordinateLists);
+        }
+        if domain.len() == 0 {
+            return Err(InterpolationError::NoPointsProvided);
+        }
+
+        let x = Self::from(vec![S::zero(), S::one()]);
+        let mut acc = Self::zero();
+        for (i, v_i) in values.into_iter().enumerate() {
+            let mut product = Polynomial::from(vec![v_i]);
+            for (j, d_j) in domain.iter().enumerate() {
+                if j == i {
+                    continue;
+                }
+                product = product
+                    * (x.clone() - Polynomial::from(vec![d_j.clone()]))
+                    * Polynomial::from(vec![(domain[i].clone() - d_j.clone()).inverse()]);
+            }
+            acc += product;
+            dbg!(&acc);
+        }
+        Ok(acc)
+    }
+
     fn _trim_degree(&mut self) {
         while self.coefficients.ends_with(&[S::zero()]) {
             self.coefficients.pop();
@@ -93,7 +142,7 @@ where
     }
 }
 
-impl<S: Scalar> Scalar for Polynomial<S> {
+impl<S: Scalar> SimpleNum for Polynomial<S> {
     fn zero() -> Self {
         Self {
             coefficients: Vec::new(),
@@ -169,7 +218,8 @@ where
             std::mem::swap(&mut self.coefficients, &mut rhs.coefficients)
         }
         for (c1, c2) in self.coefficients.iter_mut().zip(rhs.coefficients) {
-            *c1 += c2
+            // TODO: adapt for AddAssign if it is included in Scalar
+            *c1 = c1.clone() + c2
         }
     }
 }
@@ -250,7 +300,8 @@ where
                 continue;
             }
             for (j, c2) in rhs.coefficients.iter().enumerate() {
-                coefs[i + j] += c1.clone() * c2.clone()
+                // TODO: Adapt for AddAssign if it's added back
+                coefs[i + j] = coefs[i + j].clone() + c1.clone() * c2.clone()
             }
         }
 
@@ -266,9 +317,7 @@ where
 {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
-        let (quotient, _rem) = self
-            .divide_with_remainder(rhs)
-            .expect("Cannot divide by zero");
+        let (quotient, _rem) = self.long_divide(rhs).expect("Cannot divide by zero");
         quotient
     }
 }
@@ -280,20 +329,24 @@ where
     type Output = Self;
 
     fn rem(self, rhs: Self) -> Self::Output {
-        let (_quotient, rem) = self
-            .divide_with_remainder(rhs)
-            .expect("Cannot divide by zero");
+        let (_quotient, rem) = self.long_divide(rhs).expect("Cannot divide by zero");
         rem
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::scalar::Scalar;
+    use num::BigInt;
+
+    use crate::{
+        field_elem::FieldElement,
+        scalar::{Scalar, SimpleNum},
+        DefaultField,
+    };
 
     use super::Polynomial;
 
-    impl Scalar for i32 {
+    impl SimpleNum for u32 {
         fn is_zero(&self) -> bool {
             *self == 0
         }
@@ -307,6 +360,8 @@ mod tests {
         }
     }
 
+    impl Scalar for u32 {}
+
     #[test]
     fn test_add() {
         let a = Polynomial::from_ref(&[1, 2, 3, 4, 5]);
@@ -315,6 +370,66 @@ mod tests {
         assert_eq!(
             (a + b).coefficients,
             Polynomial::from_ref(&[2, 4, 6, 4, 5]).coefficients
+        )
+    }
+
+    #[test]
+    fn test_mul() {
+        let a = Polynomial::from_ref(&[1, 2, 3, 4, 5]);
+        let b = Polynomial::from_ref(&[1, 2, 3]);
+
+        // [1, 2, 3, 4, 5]
+        // [0, 2, 4, 6, 8, 10]
+        // [0, 0, 3, 6, 9, 12, 15]
+        assert_eq!(
+            (a * b).coefficients,
+            Polynomial::from_ref(&[1, 4, 10, 16, 22, 22, 15]).coefficients
+        )
+    }
+
+    #[test]
+    fn test_interpolate() {
+        let mut domain: Vec<u32> = vec![0, 1, 2, 5];
+        let values = vec![2u32, 3, 12, 147];
+
+        let domain: Vec<FieldElement<BigInt, DefaultField>> = domain
+            .into_iter()
+            .map(|v| FieldElement::new(v.into()))
+            .collect();
+        let values: Vec<FieldElement<BigInt, DefaultField>> = values
+            .into_iter()
+            .map(|v| FieldElement::new(v.into()))
+            .collect();
+
+        let p =
+            Polynomial::interpolate_domain(domain, values).expect("Polynomial must interpolate");
+        dbg!(&p);
+        assert_eq!(
+            p.evaluate(<FieldElement<BigInt, DefaultField>>::new(35u32.into())),
+            <FieldElement<BigInt, DefaultField>>::new(44067.into())
+        )
+    }
+
+    #[test]
+    fn test_interpolate_again() {
+        let mut domain: Vec<u32> = vec![0, 1, 2];
+        let values = vec![1u32, 2, 5];
+
+        let domain: Vec<FieldElement<BigInt, DefaultField>> = domain
+            .into_iter()
+            .map(|v| FieldElement::new(v.into()))
+            .collect();
+        let values: Vec<FieldElement<BigInt, DefaultField>> = values
+            .into_iter()
+            .map(|v| FieldElement::new(v.into()))
+            .collect();
+
+        let p =
+            Polynomial::interpolate_domain(domain, values).expect("Polynomial must interpolate");
+        dbg!(&p);
+        assert_eq!(
+            p.evaluate(<FieldElement<BigInt, DefaultField>>::new(35u32.into())),
+            <FieldElement<BigInt, DefaultField>>::new(1226.into())
         )
     }
 }
