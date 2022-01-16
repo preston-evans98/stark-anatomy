@@ -88,7 +88,9 @@ impl SimpleNum for BigInt {
 
 impl Scalar for BigInt{}
 
-pub trait SignedScalar: Scalar + Neg<Output = Self>{}
+pub trait CopyScalar: Scalar + Copy{}
+
+pub trait SignedScalar: CopyScalar + Neg<Output = Self>{}
 
 #[cfg(test)]
 mod tests {
