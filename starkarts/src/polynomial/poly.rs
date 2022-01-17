@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::{field_elem::FieldElement, DivByZeroError};
+use crate::{field::DivByZeroError, field_elem::FieldElement};
 
 #[derive(Debug)]
 pub enum InterpolationError {
@@ -141,21 +141,6 @@ where
                 if j == i {
                     continue;
                 }
-                println!("product: {:?}", &product.coefficients);
-                println!(
-                    "Running Subtraction: ({:?} - {:?}).inverse()",
-                    domain[i], *d_j
-                );
-                let tmp = domain[i] - *d_j;
-                println!("Running Inverse: {:?}.inverse()", tmp);
-                let inv = tmp.inverse();
-                println!(
-                    "product update: {:?} * ({:?} - {:?}) * {:?}",
-                    &product.coefficients,
-                    &x.coefficients,
-                    [*d_j],
-                    [(domain[i] - *d_j).inverse()]
-                );
                 product = product
                     * (x.clone() - Polynomial::from(vec![*d_j]))
                     * Polynomial::from(vec![(domain[i] - *d_j).inverse()]);

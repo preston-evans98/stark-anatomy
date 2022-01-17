@@ -1,4 +1,4 @@
-use crate::{field_elem::FieldElement, GoldilocksField, P as GoldilocksPrime};
+use crate::{field::PrimeField, field_elem::FieldElement, GoldilocksField, P as GoldilocksPrime};
 
 /// An element of the Goldilocks field. Not necessarily in canonical form
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -126,7 +126,7 @@ impl std::ops::Neg for GoldilocksElement {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        Self(GoldilocksField::subtract(GoldilocksPrime, self.0))
+        Self(GoldilocksField::negate(self.0))
     }
 }
 
@@ -249,7 +249,7 @@ mod tests {
             0 => 1,
             1 => val,
             x if (x % 2) == 0 => pow_128((val * val) % modulus, exponent / 2, modulus),
-            x => (val * pow_128(val, exponent - 1, modulus)) % modulus,
+            _ => (val * pow_128(val, exponent - 1, modulus)) % modulus,
         }
     }
 }

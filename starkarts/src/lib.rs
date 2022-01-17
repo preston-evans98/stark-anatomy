@@ -6,3 +6,6 @@ pub use ff::*;
 
 mod plonky2;
 pub use plonky2::*;
+
+mod polynomial;
+pub use polynomial::*;

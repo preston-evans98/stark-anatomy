@@ -1,113 +1,101 @@
-use num::{BigInt, Integer, Num};
-
-// use std::ops::{Add, Div, Mul, Rem, Sub};
-
-use crate::scalar::SimpleNum;
-
-use super::scalar::Scalar;
+use crate::uint::Uint;
 
 #[derive(Debug)]
 pub struct DivByZeroError;
 #[derive(Debug)]
 pub struct NoNthRootError;
 
-lazy_static::lazy_static! {
-    static ref P: BigInt = BigInt::from_str_radix("270497897142230380135924736767050121217", 10).unwrap();
-    static ref GENERATOR: BigInt = BigInt::from_str_radix("85408008396924667383611388730472331217", 10).unwrap();
-    static ref ORDER: BigInt = BigInt::from_str_radix("664613997892457936451903530140172288", 10).unwrap();
-}
-
+/// A Finite Field implemented modulo a prime.
 pub trait PrimeField: std::fmt::Debug + Clone {
-    type Elem: Scalar;
-    fn zero() -> Self::Elem {
-        <Self::Elem as SimpleNum>::zero()
-    }
-    fn one() -> Self::Elem {
-        <Self::Elem as SimpleNum>::one()
-    }
+    type Elem: Uint;
+
+    /// Reduce an element to its such form
+    fn reduce(n: Self::Elem) -> Self::Elem;
 
     fn p() -> Self::Elem;
     fn generator() -> Self::Elem;
     fn primitive_nth_root(n: Self::Elem) -> Result<Self::Elem, NoNthRootError>;
     fn sample(random: &[u8]) -> Self::Elem;
 
+    fn zero() -> Self::Elem {
+        <Self::Elem as Uint>::zero()
+    }
+    fn one() -> Self::Elem {
+        <Self::Elem as Uint>::one()
+    }
+
+    /// Add two field elements. The default implementation assumes that...
+    /// 1. Both elements are in the range [0, P] and
+    /// 2. Addition of such elements cannot overflow.
+    ///
+    /// This default can be overridden to relax those assumptions.
     fn add(l: Self::Elem, r: Self::Elem) -> Self::Elem {
-        (l + r) % Self::p()
+        Self::reduce(l + r)
     }
 
+    /// Subtract two field elements. The default implementation assumes that...
+    /// 1. Both elements are in the range [0, P] and
+    /// 2. Addition of such elements cannot overflow
+    ///
+    /// This default can be overridden to relax those assumptions.
     fn subtract(l: Self::Elem, r: Self::Elem) -> Self::Elem {
-        ((Self::p() + l) - r) % Self::p()
+        Self::reduce((Self::p() + l) - r)
     }
 
+    /// Multiply two field elements. The default implementation assumes that...
+    /// 1. Both elements are in the range [0, P] and
+    /// 2. multiplication of such elements cannot overflow
+    ///
+    /// This default can be overridden to relax those assumptions.
     fn multiply(l: Self::Elem, r: Self::Elem) -> Self::Elem {
-        (l * r) % Self::p()
+        Self::reduce(l * r)
     }
 
+    /// Negate a field element. The default implementation assumes that...
+    /// 1. The element is in the range [0, P]
+    ///
+    /// This default can be overridden to relax that assumptions.
     fn negate(value: Self::Elem) -> Self::Elem {
         Self::p() - value
     }
 
-    /// Computes the multiplicative inverse of value
+    /// Use the extended euclidean algorithm to compute the Greatest Common Denominators on two elements.
+    /// The default implementation assumes that...
+    /// 1. The elements are in the range [0, P]
+    /// 2. Operations on such elements cannot overflow
+    /// 3. Operations on canonical elements return canonical elements.
+    ///
+    /// This default can be overridden to relax that assumptions.
+    fn xgcd(lhs: Self::Elem, rhs: Self::Elem) -> (Self::Elem, Self::Elem, Self::Elem) {
+        let (mut old_r, mut r) = (lhs, rhs);
+        let (mut old_s, mut s) = (Self::one(), Self::zero());
+        let (mut old_t, mut t) = (Self::one(), Self::zero());
+
+        while !r.is_zero() {
+            let quotient = old_r / r;
+
+            (old_r, r) = (
+                Self::reduce(r),
+                Self::subtract(old_r, Self::multiply(quotient, r)),
+            );
+            (old_s, s) = (s, Self::subtract(old_s, Self::multiply(quotient, s)));
+            (old_t, t) = (t, Self::subtract(old_t, Self::multiply(quotient, t)));
+        }
+        (old_s, old_t, old_r)
+    }
+
+    /// Compute the multiplicative inverse of value
     fn inverse(value: Self::Elem) -> Self::Elem {
-        let (a, _, _) = Self::Elem::extended_gcd(value, Self::p());
+        let (a, _, _) = Self::xgcd(value, Self::p());
         a
     }
 
+    /// Divide two field elements.
     fn divide(l: Self::Elem, r: Self::Elem) -> Result<Self::Elem, DivByZeroError> {
         if r.is_zero() {
             return Err(DivByZeroError);
         }
-        let (a, _, _) = Self::Elem::extended_gcd(r, Self::p());
-        Ok((l * a) % Self::p())
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct DefaultField;
-impl PrimeField for DefaultField {
-    type Elem = BigInt;
-    fn p() -> Self::Elem {
-        P.clone()
-    }
-
-    fn generator() -> Self::Elem {
-        GENERATOR.clone()
-    }
-
-    fn primitive_nth_root(n: Self::Elem) -> Result<Self::Elem, NoNthRootError> {
-        if n >= *ORDER || n.is_odd() {
-            return Err(NoNthRootError);
-        }
-        let mut root = ORDER.clone();
-        let mut order = ORDER.clone();
-        while order != n {
-            root = root.pow(2);
-            order /= 2usize;
-        }
-        Ok(root)
-    }
-
-    fn sample(random_bytes: &[u8]) -> Self::Elem {
-        BigInt::from_bytes_be(num::bigint::Sign::Plus, random_bytes) % Self::p()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use num::{BigInt, Num};
-
-    use crate::PrimeField;
-
-    use super::DefaultField;
-
-    #[test]
-    fn test_inverse() {
-        let one: BigInt = 1.into();
-        let a: BigInt = DefaultField::p() - one;
-        assert_eq!(
-            a.clone(),
-            BigInt::from_str_radix("270497897142230380135924736767050121216", 10).unwrap()
-        );
-        assert_eq!(DefaultField::inverse(a), 1.into());
+        Ok(Self::reduce(l * Self::inverse(r)))
     }
 }

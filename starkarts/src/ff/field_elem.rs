@@ -6,6 +6,10 @@ pub trait FieldElement:
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>
     + Div<Self, Output = Self>
+    + for<'a> Add<&'a Self, Output = Self>
+    + for<'a> Sub<&'a Self, Output = Self>
+    + for<'a> Mul<&'a Self, Output = Self>
+    + for<'a> Div<&'a Self, Output = Self>
     + Neg<Output = Self>
     + PartialOrd
     + PartialEq
@@ -13,9 +17,9 @@ pub trait FieldElement:
 {
     fn xgcd(self, rhs: Self) -> (Self, Self, Self);
 
-    // Returns the additive identity
+    /// Returns the additive identity
     fn zero() -> Self;
-    // Returns the multiplicative identity
+    /// Returns the multiplicative identity
     fn one() -> Self;
     fn is_zero(self) -> bool;
 
