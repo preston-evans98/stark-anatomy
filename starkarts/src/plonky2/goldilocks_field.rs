@@ -5,7 +5,7 @@ pub struct GoldilocksField;
 pub const P: u64 = u64::MAX - (u32::MAX as u64) + 1;
 const LOW_32_BITS: u64 = std::u32::MAX as u64;
 const U32_MAX: u64 = std::u32::MAX as u64;
-const U32_MAX_DOUBLED: u64 = (std::u32::MAX as u64) * 2;
+// const U32_MAX_DOUBLED: u64 = (std::u32::MAX as u64) * 2;
 
 ///  A 64 bit field allowing very arithmetic on modern CPUs.
 ///  https://github.com/mir-protocol/plonky2/blob/main/plonky2.pdf
@@ -43,7 +43,7 @@ impl GoldilocksField {
     /// https://github.com/mir-protocol/plonky2/blob/main/plonky2.pdf
     pub fn reduce_u96(low_order_bits: u64, high_order_bits: u32) -> u64 {
         let n0 = low_order_bits;
-        let n1: u64 = (high_order_bits as u64) << 32 - high_order_bits;
+        let n1: u64 = ((high_order_bits as u64) << 32) - (high_order_bits as u64);
         let (mut result, overflow) = n0.overflowing_add(n1);
         if overflow {
             // If we overflowed, this subtraction will underflow yielding the correct result
@@ -60,25 +60,29 @@ impl GoldilocksField {
     /// `n = n0 + (2^32 -1)` if overflowed
     /// else: `n = n0`
     pub fn reduce_addition(overflowing_add_result: (u64, bool)) -> u64 {
-        let (result, overflowed) = overflowing_add_result;
-        match overflowed {
-            // If we overflowed, compute n0 + (2^32 -1) = n0 + U32_MAX
-            true => {
-                // If the result was already greater than P, subtract P before adding u32_MAX
-                if result >= P {
-                    // Equivalent to sub_p_from(result) + U32_MAX.
-                    // sub_p_from(result) = lhs.wrapping_add(U32_MAX). Thus the wrapped portion of
-                    // result is less than P, so we can safely add U32_MAX without overflowing again.
-                    // For speed, we simply combine the two additions.
-                    return result.wrapping_add(U32_MAX_DOUBLED);
-                }
-                // Otherwise, result < P => result < (2^64 - 2^32 +1)
-                // => result + (2^32 - 1) < (2^64 - 2^32 +1) (2^32 - 1)
-                // => result + (2^32 - 1)  < 2^64. Therefore, the operation cannot overflow
-                return unsafe { result.unchecked_add(U32_MAX) };
-            }
-            false => result,
+        // let (result, overflowed) = overflowing_add_result;
+        // match overflowed {
+        //     // If we overflowed, compute n0 + (2^32 -1) = n0 + U32_MAX
+        //     true => {
+        //         // If the result was already greater than P, subtract P before adding u32_MAX
+        //         if result >= P {
+        //             // Equivalent to sub_p_from(result) + U32_MAX.
+        //             // sub_p_from(result) = lhs.wrapping_add(U32_MAX). Thus the wrapped portion of
+        //             // result is less than P, so we can safely add U32_MAX without overflowing again.
+        //             // For speed, we simply combine the two additions.
+        //             return result.wrapping_add(U32_MAX_DOUBLED);
+        //         }
+        //         // Otherwise, result < P => result < (2^64 - 2^32 +1)
+        //         // => result + (2^32 - 1) < (2^64 - 2^32 +1) (2^32 - 1)
+        //         // => result + (2^32 - 1)  < 2^64. Therefore, the operation cannot overflow
+        //         return unsafe { result.unchecked_add(U32_MAX) };
+        //     }
+        //     false => result,
+        // }
+        if overflowing_add_result.1 {
+            return Self::reduce_u96(overflowing_add_result.0, 1);
         }
+        overflowing_add_result.0
     }
 
     pub fn add(x: u64, y: u64) -> u64 {
@@ -90,11 +94,17 @@ impl GoldilocksField {
         let (mut old_s, mut s) = (1, 0);
         let (mut old_t, mut t) = (0, 1);
 
+        // if r >= P {
+        //     r = GoldilocksField::sub_p_from(r)
+        // }
         while r != 0 {
             let quotient = old_r / r;
             (old_r, r) = (r, Self::subtract(old_r, Self::multiply(quotient, r)));
             (old_s, s) = (s, Self::subtract(old_s, Self::multiply(quotient, s)));
             (old_t, t) = (t, Self::subtract(old_t, Self::multiply(quotient, t)));
+            if r >= P {
+                r = GoldilocksField::sub_p_from(r)
+            }
         }
         (old_s, old_t, old_r)
     }
