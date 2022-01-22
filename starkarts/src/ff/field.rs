@@ -69,15 +69,11 @@ pub trait PrimeField: std::fmt::Debug + Clone {
     fn xgcd(lhs: Self::Elem, rhs: Self::Elem) -> (Self::Elem, Self::Elem, Self::Elem) {
         let (mut old_r, mut r) = (lhs, rhs);
         let (mut old_s, mut s) = (Self::one(), Self::zero());
-        let (mut old_t, mut t) = (Self::one(), Self::zero());
+        let (mut old_t, mut t) = (Self::zero(), Self::one());
 
         while !r.is_zero() {
             let quotient = old_r / r;
-
-            (old_r, r) = (
-                Self::reduce(r),
-                Self::subtract(old_r, Self::multiply(quotient, r)),
-            );
+            (old_r, r) = (r, Self::subtract(old_r, Self::multiply(quotient, r)));
             (old_s, s) = (s, Self::subtract(old_s, Self::multiply(quotient, s)));
             (old_t, t) = (t, Self::subtract(old_t, Self::multiply(quotient, t)));
         }
@@ -97,5 +93,19 @@ pub trait PrimeField: std::fmt::Debug + Clone {
         }
 
         Ok(Self::reduce(l * Self::inverse(r)))
+    }
+
+    fn pow(mut base: Self::Elem, mut exponent: usize) -> Self::Elem {
+        let mut acc = Self::Elem::one();
+        while exponent != 0 {
+            if exponent & 1 == 0 {
+                base = <Self as PrimeField>::multiply(base, base);
+                exponent >>= 1
+            } else {
+                acc = <Self as PrimeField>::multiply(base, acc);
+                exponent -= 1
+            }
+        }
+        acc
     }
 }

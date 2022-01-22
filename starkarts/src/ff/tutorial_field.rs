@@ -68,11 +68,10 @@ mod tests {
     fn test_inverse() {
         let one: U256 = 1.into();
         let a: U256 = StarkTutorialField::p() - one;
-        assert_eq!(
-            a,
-            U256::from_dec_str("270497897142230380135924736767050121216").unwrap()
-        );
+        let expected_result =
+            U256::from_dec_str("270497897142230380135924736767050121216").unwrap();
+        assert_eq!(a, expected_result);
 
-        assert_eq!(StarkTutorialField::inverse(a), 1.into());
+        assert_eq!(StarkTutorialField::inverse(a), expected_result);
     }
 }

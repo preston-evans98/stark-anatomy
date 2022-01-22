@@ -262,3 +262,115 @@ mod tests {
         assert_eq!(GoldilocksField::subtract(0, P - 2), 2);
     }
 }
+
+#[cfg(test)]
+mod integ_tests {
+    use crate::{
+        field::PrimeField, field_elem::FieldElement, uint::Uint, GoldilocksElement,
+        P as GoldilocksPrime,
+    };
+    use proptest::prelude::*;
+
+    #[derive(Debug, Clone, Copy)]
+    struct DefaultGoldilocksField;
+
+    impl Uint for u128 {
+        fn is_zero(&self) -> bool {
+            *self == 0
+        }
+
+        fn zero() -> Self {
+            0
+        }
+
+        fn one() -> Self {
+            1
+        }
+
+        fn is_even(&self) -> bool {
+            *self & 1 == 0
+        }
+
+        fn is_odd(&self) -> bool {
+            *self & 1 == 0
+        }
+    }
+
+    impl PrimeField for DefaultGoldilocksField {
+        type Elem = u128;
+
+        fn reduce(n: Self::Elem) -> Self::Elem {
+            n % Self::p()
+        }
+
+        fn p() -> Self::Elem {
+            GoldilocksPrime as u128
+        }
+
+        fn generator() -> Self::Elem {
+            todo!()
+        }
+
+        fn primitive_nth_root(n: Self::Elem) -> Result<Self::Elem, crate::field::NoNthRootError> {
+            todo!()
+        }
+
+        fn sample(random: &[u8]) -> Self::Elem {
+            todo!()
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100000))]
+        #[test]
+        fn adds_match(a: u64, b: u64) {
+            let goldilocks_result = GoldilocksElement::from_u64(a) + GoldilocksElement::from_u64(b);
+            let default_result = DefaultGoldilocksField::add(a as u128, b as u128);
+            prop_assert_eq!(goldilocks_result, default_result as u64)
+        }
+
+        #[test]
+        fn subtracts_match(a: u64, b: u64) {
+            let goldilocks_result = GoldilocksElement::from_u64(a) - GoldilocksElement::from_u64(b);
+            let default_result = DefaultGoldilocksField::subtract(a as u128, b as u128);
+            prop_assert_eq!(goldilocks_result, default_result as u64)
+        }
+
+
+        #[test]
+        fn multiplies_match(a: u64, b: u64) {
+            let goldilocks_result = GoldilocksElement::from_u64(a) * GoldilocksElement::from_u64(b);
+            let default_result = DefaultGoldilocksField::multiply(a as u128, b as u128);
+            prop_assert_eq!(goldilocks_result, default_result as u64)
+        }
+
+        #[test]
+        fn inverts_match(a: u64) {
+            let goldilocks_inverse = GoldilocksElement::from_u64(a).inverse();
+
+            let default_result = DefaultGoldilocksField::inverse(a as u128);
+            prop_assert_eq!(goldilocks_inverse,  default_result as u64)
+        }
+
+        #[test]
+        fn divides_match(a: u64, b: u64) {
+            let div_result = GoldilocksElement::from_u64(a) / GoldilocksElement::from_u64(b);
+            let default_result = DefaultGoldilocksField::divide(a as u128, b as u128);
+            prop_assert_eq!(div_result, default_result.unwrap_or(0) as u64)
+        }
+
+        #[test]
+        fn negates_match(a: u64) {
+            let neg_result = -GoldilocksElement::from_u64(a);
+            let default_result = DefaultGoldilocksField::negate(a as u128);
+            prop_assert_eq!(neg_result, default_result as u64)
+        }
+
+        #[test]
+        fn pows_match(a: u64, b: usize) {
+            let pow_result  = GoldilocksElement::from_u64(a).pow(b);
+            let default_result = DefaultGoldilocksField::pow(a as u128, b);
+            prop_assert_eq!(pow_result, default_result as u64)
+        }
+    }
+}
