@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use crate::{field_elem::FieldElement, P};
 type exponent = usize;
@@ -46,6 +46,30 @@ pub struct MultiVariatePoly<F, const VARIABLES: usize> {
     dict: HashMap<Exponents<VARIABLES>, F>,
 }
 
+impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES>
+where
+    [(); { max(VARIABLES, VARIABLES) }]:,
+{
+    fn zero_exponent() -> Exponents<VARIABLES> {
+        Exponents::<VARIABLES>::new()
+    }
+    pub fn pow(self, mut exponent: usize) -> Self {
+        let dict = HashMap::from([(Self::zero_exponent(), F::one())]);
+        let mut acc = MultiVariatePoly { dict };
+        let mut base = self;
+        while exponent != 0 {
+            if exponent & 1 == 0 {
+                base = &base * &base;
+                exponent >>= 1
+            } else {
+                acc = &base * &acc;
+                exponent -= 1
+            }
+        }
+        acc
+    }
+}
+
 impl<F, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
     fn insert_padded<const OTHER: usize>(&mut self, exponents: Exponents<OTHER>, value: F) {
         let exponents = exponents.pad::<VARIABLES>();
@@ -57,7 +81,7 @@ impl<F, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
         mut exponents: Exponents<OTHER>,
         value: F,
     ) -> Option<F> {
-        // Hack for tranmuting cons generic arrays taken from: https://github.com/rust-lang/rust/issues/61956
+        // Hack for tranmuting const generic arrays taken from: https://github.com/rust-lang/rust/issues/61956
         let ptr = &mut exponents.0 as *mut _ as *mut [exponent; VARIABLES];
         let res = ptr.read();
         self.dict.insert(Exponents(res), value)
@@ -78,6 +102,7 @@ impl<F, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
         }
     }
 }
+
 pub const fn max(lhs: usize, rhs: usize) -> usize {
     if lhs > rhs {
         lhs
@@ -147,14 +172,6 @@ where
     }
 }
 
-// impl<F> std::iter::Iterator for MultiVariatePoly<F> {
-//     type Item = (Variable, Vec<F>);
-
-//     fn next(&mut self) -> Option<Self::Item> {
-
-//     }
-// }
-
 impl<F, const VARIABLES: usize, const OTHER: usize> std::ops::Mul<&MultiVariatePoly<F, OTHER>>
     for &MultiVariatePoly<F, VARIABLES>
 where
@@ -178,5 +195,30 @@ where
             }
         }
         result
+    }
+}
+
+impl<F: FieldElement, const VARIABLES: usize> std::ops::Neg for &MultiVariatePoly<F, VARIABLES> {
+    type Output = MultiVariatePoly<F, VARIABLES>;
+
+    fn neg(self) -> Self::Output {
+        let mut other_dict = HashMap::with_capacity(self.dict.len());
+        for (k, v) in self.dict.iter() {
+            other_dict.insert(*k, -*v);
+        }
+        MultiVariatePoly { dict: other_dict }
+    }
+}
+
+impl<F, const VARIABLES: usize, const OTHER: usize> std::ops::Sub<&MultiVariatePoly<F, OTHER>>
+    for &MultiVariatePoly<F, VARIABLES>
+where
+    [(); max(VARIABLES, OTHER)]:,
+    F: FieldElement,
+{
+    type Output = MultiVariatePoly<F, { max(VARIABLES, OTHER) }>;
+
+    fn sub(self, rhs: &MultiVariatePoly<F, OTHER>) -> Self::Output {
+        self + &(-rhs)
     }
 }
