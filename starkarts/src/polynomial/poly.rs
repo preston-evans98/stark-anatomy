@@ -184,6 +184,8 @@ where
             == 1
     }
 
+    // Trim leading zero coefficients from the polynomial, so that future calls
+    // to degree() return the correct result
     fn _trim_degree(&mut self) {
         while self.coefficients.ends_with(&[F::zero()]) {
             self.coefficients.pop();
