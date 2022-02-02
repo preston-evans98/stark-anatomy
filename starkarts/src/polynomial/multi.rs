@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash, mem::MaybeUninit};
 
 use crate::field_elem::FieldElement;
 
@@ -8,6 +8,12 @@ pub struct Exponents<const VARIABLES: usize>([usize; VARIABLES]);
 impl<const VARIABLES: usize> Exponents<VARIABLES> {
     const fn new() -> Exponents<VARIABLES> {
         Self([0usize; VARIABLES])
+    }
+
+    fn with_val_at_idx(val: usize, idx: usize) -> Self {
+        let mut res = [0usize; VARIABLES];
+        res[idx] = val;
+        Self(res)
     }
 }
 
@@ -31,22 +37,44 @@ pub struct MultiVariatePoly<F, const VARIABLES: usize> {
 }
 
 impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
+    /// Returns the zero value of this polynomial's exponent representation
     fn zero_exponent() -> Exponents<VARIABLES> {
         Exponents::<VARIABLES>::new()
     }
+
+    /// Returns a constant as a polynomial
+    pub fn constant(c: F) -> Self {
+        Self {
+            dict: HashMap::from([(Self::zero_exponent(), c)]),
+        }
+    }
+
+    /// Returns a polynomial with a single term
+    pub fn monomial(exp: Exponents<VARIABLES>, coef: F) -> Self {
+        Self {
+            dict: HashMap::from([(exp, coef)]),
+        }
+    }
+
+    /// Returns the zero polynomial (additive identity)
     pub fn zero() -> Self {
         Self {
             dict: HashMap::new(),
         }
     }
-    pub fn with_capacity(c: usize) -> Self {
+    /// Create a polynomial whose underlying storage has capacity for `capacity` terms
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            dict: HashMap::with_capacity(c),
+            dict: HashMap::with_capacity(capacity),
         }
     }
+
+    /// Raises this polynomial to a power
     pub fn pow(&self, mut exponent: usize) -> Self {
-        let dict = HashMap::from([(Self::zero_exponent(), F::one())]);
-        let mut acc = MultiVariatePoly { dict };
+        if self.is_zero() {
+            return Self::zero();
+        }
+        let mut acc = MultiVariatePoly::constant(F::one());
         let mut base = self.clone();
         while exponent != 0 {
             if exponent & 1 == 0 {
@@ -62,9 +90,10 @@ impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
 }
 
 impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
+    /// Insert a term into the polynomial, overwriting whatever coefficient it might have had before.
     fn insert(&mut self, exponents: Exponents<VARIABLES>, value: F) {
         if value.is_zero() {
-            return;
+            self.dict.remove(&exponents);
         }
         self.dict.insert(exponents, value);
     }
@@ -88,10 +117,33 @@ impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
     }
 
     pub fn is_zero(&self) -> bool {
-        self.dict.len() == 0
+        self.len() == 0
     }
+
+    /// The number of non-zero terms in the polynomial
     pub fn len(&self) -> usize {
         self.dict.len()
+    }
+
+    /// Return an array of monomials, each consisting of a single variable from the polynomial
+    /// For example, the multivariate polynomial class [c x^a y^b z^c] returns [x, y, z]
+    pub fn variables() -> [Self; VARIABLES] {
+        let mut arr: [MaybeUninit<Self>; VARIABLES] =
+            unsafe { MaybeUninit::uninit().assume_init() };
+        let mut idx = 0;
+        for elem in &mut arr {
+            let exp = Exponents::<VARIABLES>::with_val_at_idx(1, idx);
+            elem.write(Self::monomial(exp, F::one()));
+            idx += 1;
+        }
+
+        // Hack for transmuting const generic arrays taken from: https://github.com/rust-lang/rust/issues/61956
+        unsafe {
+            let ptr = &mut arr as *mut _ as *mut [Self; VARIABLES];
+            let res = ptr.read();
+            core::mem::forget(arr);
+            res
+        }
     }
 }
 
