@@ -63,17 +63,35 @@ impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
 
 impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
     fn insert(&mut self, exponents: Exponents<VARIABLES>, value: F) {
+        if value.is_zero() {
+            return;
+        }
         self.dict.insert(exponents, value);
     }
 
     /// Add a single term to the polynomial. For example (3xy + 4x).add_term(2x) = (3xy + 6x)
     pub fn add_term(&mut self, exponents: Exponents<VARIABLES>, coef: F) {
+        if coef.is_zero() {
+            return;
+        }
         match self.dict.insert(exponents, coef) {
             Some(existing_coef) => {
-                self.dict.insert(exponents, coef * existing_coef);
+                let new_coef = existing_coef + coef;
+                if new_coef.is_zero() {
+                    self.dict.remove(&exponents);
+                    return;
+                }
+                self.dict.insert(exponents, new_coef);
             }
             None => {}
         }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.dict.len() == 0
+    }
+    pub fn len(&self) -> usize {
+        self.dict.len()
     }
 }
 
@@ -84,7 +102,7 @@ where
     type Output = MultiVariatePoly<F, VARIABLES>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let mut result = MultiVariatePoly::with_capacity(self.dict.len() + rhs.dict.len());
+        let mut result = MultiVariatePoly::with_capacity(self.len() + rhs.len());
         for (exp, coef) in self.dict.iter() {
             result.insert(*exp, *coef);
         }
@@ -102,7 +120,7 @@ where
     type Output = MultiVariatePoly<F, VARIABLES>;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        let mut result = MultiVariatePoly::with_capacity(self.dict.len() * rhs.dict.len());
+        let mut result = MultiVariatePoly::with_capacity(self.len() * rhs.len());
         for (exp1, coef1) in self.dict.iter() {
             for (exp2, coef2) in rhs.dict.iter() {
                 let coef = *coef1 * *coef2;
@@ -118,7 +136,7 @@ impl<F: FieldElement, const VARIABLES: usize> std::ops::Neg for &MultiVariatePol
     type Output = MultiVariatePoly<F, VARIABLES>;
 
     fn neg(self) -> Self::Output {
-        let mut other_dict = HashMap::with_capacity(self.dict.len());
+        let mut other_dict = HashMap::with_capacity(self.len());
         for (k, v) in self.dict.iter() {
             other_dict.insert(*k, -*v);
         }
@@ -133,7 +151,7 @@ where
     type Output = MultiVariatePoly<F, VARIABLES>;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        let mut result = MultiVariatePoly::with_capacity(self.dict.len() + rhs.dict.len());
+        let mut result = MultiVariatePoly::with_capacity(self.len() + rhs.len());
         for (exp, coef) in self.dict.iter() {
             result.insert(*exp, -*coef);
         }
