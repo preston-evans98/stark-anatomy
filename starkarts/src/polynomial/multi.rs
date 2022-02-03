@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::Hash, mem::MaybeUninit};
 
-use crate::field_elem::FieldElement;
+use crate::{field_elem::FieldElement, Polynomial};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Exponents<const VARIABLES: usize>([usize; VARIABLES]);
@@ -86,6 +86,17 @@ impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
             }
         }
         acc
+    }
+
+    /// Interprets a univariate polynomial as multivariate. The caller must specify
+    /// the index of the univariate's variable into the multivariate's exponent array.
+    pub fn lift(polynomial: Polynomial<F>, index_into_exponents: usize) -> Self {
+        let mut result = Self::with_capacity((polynomial.degree() + 1) as usize);
+        for (power, coef) in polynomial.coefficients.iter().enumerate() {
+            let exponents = Exponents::with_val_at_idx(power, index_into_exponents);
+            result.insert(exponents, *coef);
+        }
+        result
     }
 }
 
