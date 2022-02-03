@@ -12,7 +12,7 @@ pub enum InterpolationError {
 /// A polynomial, represented as a list of coefficients, with the lowest degree coefficient first.
 /// For example, 5x^2 + 1 is represented [1, 0, 5]
 pub struct Polynomial<F> {
-    coefficients: Vec<F>,
+    pub coefficients: Vec<F>,
 }
 
 impl<F> Polynomial<F>
