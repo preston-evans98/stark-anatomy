@@ -50,13 +50,21 @@ where
         self.coefficients.last()
     }
 
-    fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.coefficients.len() == 0
     }
 
-    fn zero() -> Self {
+    /// The polynomial additive identity
+    pub fn zero() -> Self {
         Self {
             coefficients: Vec::new(),
+        }
+    }
+
+    /// The polynomial multiplicative identity
+    pub fn one() -> Self {
+        Self {
+            coefficients: vec![F::one()],
         }
     }
 
@@ -169,6 +177,24 @@ where
                 .map(|(i, coef)| factor.pow(i) * (*coef))
                 .collect(),
         )
+    }
+
+    pub fn pow(&self, mut exponent: usize) -> Self {
+        if self.is_zero() {
+            return Self::zero();
+        }
+        let mut acc = Self::one();
+        let mut base = self.clone();
+        while exponent != 0 {
+            if exponent & 1 == 0 {
+                base = &base * &base;
+                exponent >>= 1
+            } else {
+                acc = &base * &acc;
+                exponent -= 1
+            }
+        }
+        acc
     }
 
     pub fn are_colinear(points: Vec<(F, F)>) -> bool {
@@ -323,6 +349,33 @@ where
     fn mul(self, rhs: Self) -> Self::Output {
         if self.is_zero() || rhs.is_zero() {
             return Self::zero();
+        }
+        let mut coefs = F::zeros((self.degree() + rhs.degree() + 1) as usize);
+
+        for (i, c1) in self.coefficients.iter().enumerate() {
+            // If c1 is zero then c1 * c2 = 0 * c2 = 0, so we can skip this iteration
+            if c1.is_zero() {
+                continue;
+            }
+            for (j, c2) in rhs.coefficients.iter().enumerate() {
+                // TODO: Adapt for AddAssign if it's added back
+                coefs[i + j] = coefs[i + j].clone() + c1.clone() * c2.clone()
+            }
+        }
+
+        return Polynomial::from(coefs);
+    }
+}
+
+impl<F> std::ops::Mul for &Polynomial<F>
+where
+    F: FieldElement,
+{
+    type Output = Polynomial<F>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        if self.is_zero() || rhs.is_zero() {
+            return Polynomial::zero();
         }
         let mut coefs = F::zeros((self.degree() + rhs.degree() + 1) as usize);
 

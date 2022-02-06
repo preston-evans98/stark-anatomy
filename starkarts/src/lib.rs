@@ -1,4 +1,3 @@
-#![feature(destructuring_assignment)]
 #![feature(unchecked_math)]
 #![feature(bigint_helper_methods)]
 mod ff;

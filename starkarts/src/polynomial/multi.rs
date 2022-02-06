@@ -98,6 +98,32 @@ impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
         }
         result
     }
+
+    /// Evaluates this polynomial at the provided points
+    pub fn evaluate(&self, at: [F; VARIABLES]) -> F {
+        let mut acc = F::zero();
+        for (exp, coef) in self.dict.iter() {
+            acc = acc
+                + at.into_iter()
+                    .zip(exp.0.into_iter())
+                    .fold(*coef, |accumulator, (point, exponent)| {
+                        accumulator * point.pow(exponent)
+                    });
+        }
+        acc
+    }
+
+    pub fn evaluate_symbolic(&self, at: [Polynomial<F>; VARIABLES]) -> Polynomial<F> {
+        let mut acc = Polynomial::zero();
+        for (exponents, coef) in self.dict.iter() {
+            let mut prod = Polynomial::<F>::from_ref(&[*coef]);
+            for (exp, point) in exponents.0.iter().zip(at.iter()) {
+                prod = prod * point.pow(*exp);
+            }
+            acc = acc + prod
+        }
+        acc
+    }
 }
 
 impl<F: FieldElement, const VARIABLES: usize> MultiVariatePoly<F, VARIABLES> {
