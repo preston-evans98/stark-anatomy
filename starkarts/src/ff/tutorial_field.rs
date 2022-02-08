@@ -11,6 +11,7 @@ use crate::{
 
 // use super::scalar::Scalar;
 
+// TODO: Remove dependency on lazy_static
 lazy_static::lazy_static! {
     static ref P: U256 = U256::from_dec_str("270497897142230380135924736767050121217").unwrap();
     static ref GENERATOR: U256 = U256::from_dec_str("85408008396924667383611388730472331217").unwrap();

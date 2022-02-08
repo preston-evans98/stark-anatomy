@@ -1,4 +1,10 @@
-use crate::CanonicalSer;
+use crate::{CanonObjectTag, CanonicalSer};
+use byteorder::{LittleEndian, WriteBytesExt};
+use sha3::{
+    digest::{ExtendableOutput, Update, XofReader},
+    Shake256,
+};
+
 /// A ProofStream contains all of the messages that would have
 /// been sent between a Prover and Verifier if the proof were
 /// interactive.
@@ -23,36 +29,47 @@ impl ProofStream {
         }
         None
     }
-}
 
-// impl CanonicalSer for ProofStream {
-//     fn canon_serialize(&self, mut out: &mut Vec<u8>) {
-//         for item in self.objects.iter() {
-//             item.canon_serialize(&mut out);
-//         }
-//     }
-// }
+    pub fn prover_fiat_shamir(&self) -> [u8; 32] {
+        let mut hasher = Shake256::default();
+        hasher.update(&self.canon_serialize_to_vec());
+        let mut reader = hasher.finalize_xof();
+        let mut result = [0u8; 32];
+        reader.read(&mut result);
+        result
+    }
 
-impl CanonicalSer for ProofStream {
-    fn canon_serialize(&self, mut out: &mut Vec<u8>) {
-        for item in self.objects.iter() {
+    pub fn verifier_fiat_shamir(&self) -> [u8; 32] {
+        let mut serialized = Vec::new();
+        let mut hasher = Shake256::default();
+        self.serialize_up_to_cursor(&mut serialized);
+        hasher.update(&mut serialized);
+
+        let mut reader = hasher.finalize_xof();
+        let mut result = [0u8; 32];
+        reader.read(&mut result);
+        result
+    }
+
+    fn serialize_up_to_cursor(&self, mut out: &mut Vec<u8>) {
+        out.write_u8(CanonObjectTag::ProofStream as u8)
+            .expect("write to vec must succeed");
+        out.write_u32::<LittleEndian>(self.cursor as u32)
+            .expect("write to vec must succeed");
+        for item in self.objects.iter().take(self.cursor) {
             item.canon_serialize(&mut out);
         }
     }
 }
 
-use std::rc::Rc;
-
-use sha3::{
-    digest::{ExtendableOutput, Update, XofReader},
-    Shake128,
-};
-
-// use hex_literal::hex;
-
-// let mut hasher = Shake128::default();
-// hasher.update(b"abc");
-// let mut reader = hasher.finalize_xof();
-// let mut res1 = [0u8; 10];
-// reader.read(&mut res1);
-// assert_eq!(res1, hex!("5881092dd818bf5cf8a3"));
+impl CanonicalSer for ProofStream {
+    fn canon_serialize(&self, mut out: &mut Vec<u8>) {
+        out.write_u8(CanonObjectTag::ProofStream as u8)
+            .expect("write to vec must succeed");
+        out.write_u32::<LittleEndian>(self.objects.len() as u32)
+            .expect("write to vec must succeed");
+        for item in self.objects.iter() {
+            item.canon_serialize(&mut out);
+        }
+    }
+}
