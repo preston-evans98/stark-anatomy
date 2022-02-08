@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 bigint = { version = "4.4.3", optional = true }
 lazy_static = "1.4.0" 
+sha3 = "0.10.0"
+byteorder = "1.4.3"
 
 [dev-dependencies]
 proptest = "1.0.0"

@@ -8,3 +8,6 @@ pub use plonky2::*;
 
 mod polynomial;
 pub use polynomial::*;
+
+mod fiat_shamir;
+pub use fiat_shamir::*;
