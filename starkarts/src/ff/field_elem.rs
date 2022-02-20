@@ -1,5 +1,7 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+use crate::uint::Uint;
+
 pub trait FieldElement:
     Copy
     + Add<Self, Output = Self>
@@ -14,7 +16,9 @@ pub trait FieldElement:
     + PartialOrd
     + PartialEq
     + std::fmt::Debug
+    + From<usize>
 {
+    const byte_length: usize;
     fn xgcd(self, rhs: Self) -> (Self, Self, Self);
 
     /// Returns the additive identity
@@ -29,4 +33,6 @@ pub trait FieldElement:
     fn zeros(len: usize) -> Vec<Self> {
         std::iter::repeat(Self::zero()).take(len).collect()
     }
+    fn to_bytes_le(&self, out: &mut [u8]);
+    fn sample(random: &[u8]) -> Self;
 }

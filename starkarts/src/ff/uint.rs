@@ -29,6 +29,7 @@ pub trait Uint:
 
     fn is_even(&self) -> bool;
     fn is_odd(&self) -> bool;
+    fn to_bytes_le(&self, out: &mut [u8]);
 }
 
 /// All instances of any field implement the trait Scalar.
@@ -66,5 +67,8 @@ impl Uint for U256 {
     }
     fn is_odd(&self) -> bool {
         self.bit(0)
+    }
+    fn to_bytes_le(&self, out: &mut [u8]) {
+        self.to_little_endian(out);
     }
 }

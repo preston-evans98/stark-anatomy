@@ -11,3 +11,6 @@ pub use polynomial::*;
 
 mod fiat_shamir;
 pub use fiat_shamir::*;
+
+mod fri;
+pub use fri::*;

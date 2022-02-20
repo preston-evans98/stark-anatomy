@@ -112,6 +112,9 @@ impl Uint for u64 {
     fn is_odd(&self) -> bool {
         *self & 1 == 1
     }
+    fn to_bytes_le(&self, out: &mut [u8]) {
+        out.clone_from_slice(&self.to_le_bytes())
+    }
 }
 
 impl PrimeField for GoldilocksField {
@@ -293,6 +296,10 @@ mod integ_tests {
 
         fn is_odd(&self) -> bool {
             *self & 1 == 0
+        }
+
+        fn to_bytes_le(&self, out: &mut [u8]) {
+            out.clone_from_slice(&self.to_le_bytes())
         }
     }
 

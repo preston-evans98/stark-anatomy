@@ -6,6 +6,7 @@ use blake2::{Blake2b, Digest};
 /// This is translated from Python code at https://aszepieniec.github.io/stark-anatomy/basic-tools
 /// TODO: Replace this with an efficient (and idiomatic) implementation
 pub struct MerkleTree {}
+#[derive(Debug)]
 pub enum MerkleError {
     NotPowerOfTwo,
     IndexTooLarge,
@@ -93,6 +94,13 @@ impl MerkleTree {
             hashed_leaves.push(Self::hash(item))
         }
         Self::_commit(&hashed_leaves)
+    }
+    /// Compute the merkle root of an array of hashes of leaves.
+    /// The length of the array must be a power of two.
+    pub fn commit_preprocessed(
+        hashed_leaves: &[GenericArray<u8, U32>],
+    ) -> Result<GenericArray<u8, U32>, MerkleError> {
+        Self::_commit(hashed_leaves)
     }
     /// Create a merkle proof for the leaf at some index.
     pub fn open(index: usize, leaves: &[&[u8]]) -> Result<Vec<GenericArray<u8, U32>>, MerkleError> {

@@ -1,8 +1,20 @@
-use crate::{field::PrimeField, field_elem::FieldElement, GoldilocksField, P as GoldilocksPrime};
+use std::io::Cursor;
+
+use byteorder::{LittleEndian, ReadBytesExt};
+
+use crate::{
+    field::PrimeField, field_elem::FieldElement, uint::Uint, GoldilocksField, P as GoldilocksPrime,
+};
 
 /// An element of the Goldilocks field. Not necessarily in canonical form
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct GoldilocksElement(u64);
+
+impl From<usize> for GoldilocksElement {
+    fn from(x: usize) -> Self {
+        Self(x as u64)
+    }
+}
 
 impl GoldilocksElement {
     pub fn from_u32(item: u32) -> Self {
@@ -131,6 +143,7 @@ impl std::ops::Neg for GoldilocksElement {
 }
 
 impl FieldElement for GoldilocksElement {
+    const byte_length: usize = 8;
     fn is_zero(self) -> bool {
         self.0 == 0
     }
@@ -156,6 +169,19 @@ impl FieldElement for GoldilocksElement {
     /// Raises self to the power `exponent`
     fn pow(self, exponent: usize) -> Self {
         pow_iter(self, Self(1), exponent)
+    }
+
+    fn to_bytes_le(&self, out: &mut [u8]) {
+        self.0.to_bytes_le(out);
+    }
+
+    fn sample(random: &[u8]) -> Self {
+        let mut cursor = Cursor::new(random);
+        Self(
+            cursor
+                .read_u64::<LittleEndian>()
+                .expect("Must provide at least 8 bytes of randomness"),
+        )
     }
 }
 

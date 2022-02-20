@@ -12,6 +12,8 @@ impl CanonObjectTag {
         let tag = cursor.read_u8()?;
         Ok(Box::new(match tag.try_into()? {
             CanonObjectTag::ProofStream => Self::read_proof_stream(cursor)?,
+            CanonObjectTag::Bytes32 => todo!(),
+            CanonObjectTag::Evaluation => todo!(),
         }))
     }
 
@@ -46,6 +48,8 @@ impl From<std::io::Error> for DeserializationError {
 #[repr(u8)]
 pub enum CanonObjectTag {
     ProofStream = 0,
+    Bytes32 = 1,
+    Evaluation = 2,
 }
 
 impl TryFrom<u8> for CanonObjectTag {
@@ -54,6 +58,8 @@ impl TryFrom<u8> for CanonObjectTag {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::ProofStream),
+            1 => Ok(Self::Bytes32),
+            2 => Ok(Self::Evaluation),
             _ => Err(DeserializationError::MissingObjectTag),
         }
     }
