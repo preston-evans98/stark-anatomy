@@ -102,6 +102,16 @@ impl MerkleTree {
     ) -> Result<GenericArray<u8, U32>, MerkleError> {
         Self::_commit(hashed_leaves)
     }
+
+    /// Compute the merkle root of an array of hashes of leaves.
+    /// The length of the array must be a power of two.
+    pub fn open_preprocessed(
+        index: usize,
+        hashed_leaves: &[GenericArray<u8, U32>],
+    ) -> Result<Vec<GenericArray<u8, U32>>, MerkleError> {
+        Self::_open(index, hashed_leaves)
+    }
+
     /// Create a merkle proof for the leaf at some index.
     pub fn open(index: usize, leaves: &[&[u8]]) -> Result<Vec<GenericArray<u8, U32>>, MerkleError> {
         let mut hashed_leaves = Vec::with_capacity(leaves.len());

@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-use crate::uint::Uint;
+use crate::CanonicalSer;
 
 pub trait FieldElement:
     Copy
@@ -17,8 +17,9 @@ pub trait FieldElement:
     + PartialEq
     + std::fmt::Debug
     + From<usize>
+    + CanonicalSer
 {
-    const byte_length: usize;
+    const BYTE_LENGTH: usize;
     fn xgcd(self, rhs: Self) -> (Self, Self, Self);
 
     /// Returns the additive identity

@@ -7,6 +7,7 @@ use crate::{field_elem::FieldElement, CanonObjectTag, CanonicalSer, MerkleTree};
 /// [f(0), f(1), ..., f(n)]
 ///
 /// Also known as a Reed-Solomon codeword
+#[derive(Debug, Clone)]
 pub struct Evaluation<F> {
     evaluations: Vec<F>,
 }
@@ -56,7 +57,7 @@ impl<F: FieldElement> Evaluation<F> {
     pub fn merkle_preprocess<'a>(&'a self) -> Vec<GenericArray<u8, U32>> {
         let mut output = Vec::with_capacity(self.evaluations.len().next_power_of_two());
         // Precompute the hash of zero
-        let mut bytes = Vec::with_capacity(F::byte_length);
+        let mut bytes = Vec::with_capacity(F::BYTE_LENGTH);
         F::zero().to_bytes_le(&mut bytes);
         let zero_hash = MerkleTree::hash(&bytes);
         for coef in self.evaluations.iter() {
@@ -68,6 +69,14 @@ impl<F: FieldElement> Evaluation<F> {
             output.push(zero_hash.clone())
         }
         output
+    }
+
+    pub fn len(&self) -> usize {
+        self.evaluations.len()
+    }
+
+    pub fn at(&self, index: usize) -> F {
+        self.evaluations[index]
     }
 }
 
@@ -82,7 +91,7 @@ impl<F: FieldElement> CanonicalSer for Evaluation<F> {
         out.push(CanonObjectTag::Evaluation as u8);
         out.write_u64::<LittleEndian>(self.evaluations.len() as u64)
             .expect("serialization to vec cannot fail");
-        let mut serialized_eval = Vec::with_capacity(F::byte_length);
+        let mut serialized_eval = Vec::with_capacity(F::BYTE_LENGTH);
         for e in self.evaluations.iter() {
             e.to_bytes_le(&mut serialized_eval);
             out.extend_from_slice(&serialized_eval);

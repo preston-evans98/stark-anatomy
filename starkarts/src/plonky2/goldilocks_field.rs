@@ -318,11 +318,11 @@ mod integ_tests {
             todo!()
         }
 
-        fn primitive_nth_root(n: Self::Elem) -> Result<Self::Elem, crate::field::NoNthRootError> {
+        fn primitive_nth_root(_n: Self::Elem) -> Result<Self::Elem, crate::field::NoNthRootError> {
             todo!()
         }
 
-        fn sample(random: &[u8]) -> Self::Elem {
+        fn sample(_random: &[u8]) -> Self::Elem {
             todo!()
         }
     }

@@ -14,6 +14,8 @@ impl CanonObjectTag {
             CanonObjectTag::ProofStream => Self::read_proof_stream(cursor)?,
             CanonObjectTag::Bytes32 => todo!(),
             CanonObjectTag::Evaluation => todo!(),
+            CanonObjectTag::Triple => todo!(),
+            CanonObjectTag::Vec => todo!(),
         }))
     }
 
@@ -40,7 +42,7 @@ pub enum DeserializationError {
 }
 
 impl From<std::io::Error> for DeserializationError {
-    fn from(e: std::io::Error) -> Self {
+    fn from(_e: std::io::Error) -> Self {
         Self::MalformedData
     }
 }
@@ -50,6 +52,8 @@ pub enum CanonObjectTag {
     ProofStream = 0,
     Bytes32 = 1,
     Evaluation = 2,
+    Triple = 3,
+    Vec = 4,
 }
 
 impl TryFrom<u8> for CanonObjectTag {
@@ -60,6 +64,8 @@ impl TryFrom<u8> for CanonObjectTag {
             0 => Ok(Self::ProofStream),
             1 => Ok(Self::Bytes32),
             2 => Ok(Self::Evaluation),
+            3 => Ok(Self::Triple),
+            4 => Ok(Self::Vec),
             _ => Err(DeserializationError::MissingObjectTag),
         }
     }

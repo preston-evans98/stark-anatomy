@@ -1,9 +1,10 @@
 use std::io::Cursor;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    field::PrimeField, field_elem::FieldElement, uint::Uint, GoldilocksField, P as GoldilocksPrime,
+    field::PrimeField, field_elem::FieldElement, uint::Uint, CanonicalSer, GoldilocksField,
+    P as GoldilocksPrime,
 };
 
 /// An element of the Goldilocks field. Not necessarily in canonical form
@@ -142,8 +143,15 @@ impl std::ops::Neg for GoldilocksElement {
     }
 }
 
+impl CanonicalSer for GoldilocksElement {
+    fn canon_serialize(&self, out: &mut Vec<u8>) {
+        out.write_u64::<LittleEndian>(self.0)
+            .expect("Serialization to vec cannot fail")
+    }
+}
+
 impl FieldElement for GoldilocksElement {
-    const byte_length: usize = 8;
+    const BYTE_LENGTH: usize = 8;
     fn is_zero(self) -> bool {
         self.0 == 0
     }
