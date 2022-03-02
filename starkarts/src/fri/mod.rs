@@ -2,17 +2,20 @@ use blake2::digest::{consts::U32, generic_array::GenericArray};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    field_elem::FieldElement, CanonObjectTag, CanonicalSer, Evaluation, MerkleError, MerkleTree,
-    ProofStream,
+    field_elem::FieldElement, CanonObjectTag, CanonicalSer, Evaluation, InterpolationError,
+    MerkleError, MerkleTree, Polynomial, ProofStream,
 };
 
 #[derive(Debug, Copy, Clone)]
 pub enum FriError {
     InvalidDomain,
+    InvalidEvaluation,
     /// Trying to sample too many random indices for too small a codeword
     TooManySamplesRequested,
     NotPowerOfTwoSized,
     InvalidIndex,
+    ProofStreamTooShort,
+    PolynomialWasNotLowDegree,
 }
 
 impl From<MerkleError> for FriError {
@@ -20,6 +23,15 @@ impl From<MerkleError> for FriError {
         match e {
             MerkleError::NotPowerOfTwo => Self::NotPowerOfTwoSized,
             MerkleError::IndexTooLarge => Self::InvalidIndex,
+        }
+    }
+}
+
+impl From<InterpolationError> for FriError {
+    fn from(e: InterpolationError) -> Self {
+        match e {
+            InterpolationError::MismatchedCoordinateLists => FriError::InvalidDomain,
+            InterpolationError::NoPointsProvided => FriError::InvalidEvaluation,
         }
     }
 }
@@ -63,7 +75,7 @@ impl<F: FieldElement + 'static> Fri<F> {
     pub fn prove(
         &self,
         codeword: Evaluation<F>,
-        proof_stream: &mut ProofStream,
+        proof_stream: &mut ProofStream<F>,
     ) -> Result<Vec<usize>, FriError> {
         if codeword.len() != self.domain_size {
             return Err(FriError::InvalidDomain);
@@ -94,7 +106,7 @@ impl<F: FieldElement + 'static> Fri<F> {
     pub fn commit(
         &self,
         mut codeword: Evaluation<F>,
-        proof_stream: &mut ProofStream,
+        proof_stream: &mut ProofStream<F>,
     ) -> Vec<Evaluation<F>> {
         let mut omega = self.omega;
         let mut offset = self.offset;
@@ -194,7 +206,7 @@ impl<F: FieldElement + 'static> Fri<F> {
         current_codeword: &Evaluation<F>,
         next_codeword: &Evaluation<F>,
         c_indices: &[usize],
-        proof_stream: &mut ProofStream,
+        proof_stream: &mut ProofStream<F>,
     ) -> Result<Vec<usize>, FriError> {
         let a_indices = c_indices.clone();
         let b_indices: Vec<usize> = c_indices
@@ -232,6 +244,111 @@ impl<F: FieldElement + 'static> Fri<F> {
         result.extend(b_indices.into_iter());
 
         Ok(result)
+    }
+
+    pub fn verify(
+        &self,
+        proof_stream: &mut ProofStream<F>,
+        evaluation: Evaluation<F>,
+    ) -> Result<bool, FriError> {
+        let omega = self.omega;
+        let offset = self.offset;
+        let num_rounds = self.num_rounds();
+        let mut roots = Vec::with_capacity(num_rounds);
+        let mut alphas = Vec::with_capacity(num_rounds);
+
+        for _ in 0..self.num_rounds() {
+            let root = proof_stream
+                .objects
+                .get(proof_stream.cursor)
+                .ok_or(FriError::ProofStreamTooShort)?;
+            roots.push(root);
+            proof_stream.cursor += 1;
+
+            alphas.push(F::sample(&proof_stream.verifier_fiat_shamir()));
+        }
+        let last_codeword = proof_stream
+            .codeword
+            .as_ref()
+            .ok_or(FriError::ProofStreamTooShort)?;
+
+        proof_stream.cursor += 1;
+
+        let last_codeword_root =
+            MerkleTree::commit_preprocessed(&last_codeword.merkle_preprocess())?;
+
+        // Verify that the final codeword was committed to in the proof stream
+        if roots
+            .last()
+            .ok_or(FriError::InvalidIndex)?
+            .canon_serialize_to_vec()
+            != last_codeword_root.canon_serialize_to_vec()
+        {
+            return Ok(false);
+        }
+
+        // Check that the degree of the final codeword is low
+        let degree = (last_codeword.len() / self.expansion_factor) - 1;
+        let last_omega = omega.pow(2_usize.pow(num_rounds as u32));
+        let last_offset = omega.pow(2_usize.pow(num_rounds as u32));
+
+        // Verify that omega has the right order
+        if (last_omega.inverse() != last_omega.pow(last_codeword.len() - 1)) {
+            return Err(FriError::InvalidDomain);
+        }
+
+        let mut accumulator = last_offset;
+        let mut last_domain = Vec::with_capacity(last_codeword.len());
+        for _ in 0..last_codeword.len() {
+            last_domain.push(accumulator);
+            accumulator = accumulator * last_omega;
+        }
+        // TODO: Update Polynomial interface to work with borrowed value
+        let poly: Polynomial<F> =
+            Polynomial::interpolate_domain(last_domain, last_codeword.evaluations.clone())?;
+
+        // TODO: add back assertion? AFAICT, this is a debug assertion not an important check
+        // assert(poly.evaluate_domain(last_domain) == last_codeword)
+
+        if !poly.degree() <= 0 && poly.degree() as usize > degree {
+            return Err(FriError::PolynomialWasNotLowDegree);
+        }
+
+        // Get indices
+        let top_level_indices = self.sample_indices(
+            &proof_stream.verifier_fiat_shamir(),
+            self.domain_size >> 1,
+            self.domain_size >> (num_rounds - 1),
+            self.num_colinearity_checks,
+        )?;
+
+        // Check consistency between each round
+        for r in 0..num_rounds {
+            // fold c_indices
+            let c_indices: Vec<usize> = top_level_indices
+                .iter()
+                .map(|&idx| idx % (self.domain_size >> (r + 1)))
+                .collect();
+
+            let a_indices = &c_indices;
+            let b_indices: Vec<usize> = c_indices
+                .iter()
+                .map(|&idx| idx + (self.domain_size >> (r + 1)))
+                .collect();
+
+            let a_values = Vec::with_capacity(self.num_colinearity_checks);
+            let b_values = Vec::with_capacity(self.num_colinearity_checks);
+            let c_values = Vec::with_capacity(self.num_colinearity_checks);
+
+            //TODO
+            for s in 0..self.num_colinearity_checks {
+                (ay, by, cy) = proof_stream.objects[proof_stream.cursor];
+                proof_stream.advance_cursor();
+            }
+        }
+        // TODO
+
+        Ok(true)
     }
 }
 

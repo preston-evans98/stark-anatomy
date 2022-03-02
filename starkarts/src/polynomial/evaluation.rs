@@ -9,7 +9,7 @@ use crate::{field_elem::FieldElement, CanonObjectTag, CanonicalSer, MerkleTree};
 /// Also known as a Reed-Solomon codeword
 #[derive(Debug, Clone)]
 pub struct Evaluation<F> {
-    evaluations: Vec<F>,
+    pub evaluations: Vec<F>,
 }
 
 impl<F: FieldElement> Evaluation<F> {

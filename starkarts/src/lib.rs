@@ -1,5 +1,6 @@
 #![feature(unchecked_math)]
 #![feature(bigint_helper_methods)]
+#![feature(array_windows)]
 mod ff;
 pub use ff::*;
 
