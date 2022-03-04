@@ -6,30 +6,30 @@ use crate::{field_elem::FieldElement, CanonicalSer, ProofStream};
 // use crate::CanonSerializableObject;
 
 impl CanonObjectTag {
-    pub fn deser<R: std::io::Read, F: FieldElement + 'static>(
-        cursor: &mut R,
-    ) -> Result<Box<dyn CanonicalSer>, DeserializationError> {
-        let tag = cursor.read_u8()?;
-        Ok(Box::new(match tag.try_into()? {
-            CanonObjectTag::ProofStream => Self::read_proof_stream::<R, F>(cursor)?,
-            CanonObjectTag::Bytes32 => todo!(),
-            CanonObjectTag::Evaluation => todo!(),
-            CanonObjectTag::Triple => todo!(),
-            CanonObjectTag::Vec => todo!(),
-        }))
-    }
+    // pub fn deser<R: std::io::Read, F: FieldElement + 'static, S: CanonicalSer>(
+    //     cursor: &mut R,
+    // ) -> Result<S, DeserializationError> {
+    //     let tag = cursor.read_u8()?;
+    //     Ok(Box::new(match tag.try_into()? {
+    //         CanonObjectTag::ProofStream => Self::read_proof_stream::<R, F>(cursor)?,
+    //         CanonObjectTag::Bytes32 => todo!(),
+    //         CanonObjectTag::Evaluation => todo!(),
+    //         CanonObjectTag::Triple => todo!(),
+    //         CanonObjectTag::Vec => todo!(),
+    //     }))
+    // }
 
-    fn read_proof_stream<R: std::io::Read, F: FieldElement + 'static>(
-        cursor: &mut R,
-    ) -> Result<ProofStream<F>, DeserializationError> {
-        let len = cursor.read_u32::<LittleEndian>()?;
-        let mut proof = ProofStream::new();
-        for _ in 0..len {
-            let item = Self::deser::<R, F>(cursor)?;
-            proof.push(item);
-        }
-        Ok(proof)
-    }
+    // fn read_proof_stream<R: std::io::Read, F: FieldElement + 'static, S: CanonicalSer>(
+    //     cursor: &mut R,
+    // ) -> Result<ProofStream<F, S>, DeserializationError> {
+    //     let len = cursor.read_u32::<LittleEndian>()?;
+    //     let mut proof = ProofStream::new();
+    //     for _ in 0..len {
+    //         let item = Self::deser::<R, F>(cursor)?;
+    //         proof.push(item);
+    //     }
+    //     Ok(proof)
+    // }
 }
 
 pub trait CanonDeser: Sized {

@@ -10,6 +10,7 @@ pub struct MerkleTree {}
 pub enum MerkleError {
     NotPowerOfTwo,
     IndexTooLarge,
+    InvalidLeaf,
 }
 
 impl MerkleTree {

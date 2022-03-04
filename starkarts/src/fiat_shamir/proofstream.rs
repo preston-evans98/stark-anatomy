@@ -5,15 +5,16 @@ use sha3::{
     Shake256,
 };
 
+#[derive(Debug)]
 /// A ProofStream contains all of the messages that would have
 /// been sent between a Prover and Verifier if the proof were
 /// interactive.
-pub struct ProofStream<F> {
-    pub objects: Vec<Box<dyn CanonicalSer>>,
+pub struct ProofStream<F, S: CanonicalSer> {
+    pub objects: Vec<S>,
     pub codeword: Option<Evaluation<F>>,
     pub cursor: usize,
 }
-impl<F: FieldElement> ProofStream<F> {
+impl<F: FieldElement, S: CanonicalSer> ProofStream<F, S> {
     pub fn new() -> Self {
         Self {
             objects: vec![],
@@ -21,7 +22,7 @@ impl<F: FieldElement> ProofStream<F> {
             codeword: None,
         }
     }
-    pub fn push(&mut self, obj: Box<dyn CanonicalSer>) {
+    pub fn push(&mut self, obj: S) {
         self.objects.push(obj)
     }
     pub fn advance_cursor(&mut self) {
@@ -91,7 +92,7 @@ impl<F: FieldElement> ProofStream<F> {
     }
 }
 
-impl<F: FieldElement> CanonicalSer for ProofStream<F> {
+impl<F: FieldElement, S: CanonicalSer> CanonicalSer for ProofStream<F, S> {
     fn canon_serialize(&self, mut out: &mut Vec<u8>) {
         out.write_u8(CanonObjectTag::ProofStream as u8)
             .expect("write to vec must succeed");
