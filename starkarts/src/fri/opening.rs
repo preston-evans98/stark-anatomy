@@ -1,17 +1,47 @@
 use blake2::digest::{consts::U32, generic_array::GenericArray};
 
 use crate::{
-    field_elem::FieldElement, Evaluation, FriCommitment, FriError, MerkleError, MerkleTree,
+    field_elem::FieldElement, CanonicalSer, Evaluation, FriCommitment, FriError, MerkleError,
+    MerkleTree, Polynomial,
 };
 
 #[derive(Debug)]
-pub struct FriOpening<F>(Vec<Vec<ConsistencyProof<F>>>);
+/// All of the witnesses needed to verify a Fri commitment.
+pub struct FriOpenings<F>(pub Vec<FriRoundOpening<F>>);
+
+#[derive(Debug)]
+/// The witnesses needed to verify a single round of FRI
+pub struct FriRoundOpening<F>(pub Vec<ConsistencyProof<F>>);
+
+impl<F: FieldElement> FriRoundOpening<F> {
+    // TODO: double check
+    pub fn verify(
+        &self,
+        indices: &[(usize, usize, usize)],
+        alpha: F,
+        omega: F,
+        offset: F,
+        current_root: &GenericArray<u8, U32>,
+        next_root: &GenericArray<u8, U32>,
+    ) -> Result<(), FriError> {
+        // Be sure to use every set of indices. If there aren't enough
+        // Consistency proofs to do so, the Commitment was invalid.
+        if self.0.len() != indices.len() {
+            return Err(FriError::InvalidCommitment);
+        }
+        for (proof, indices) in self.0.iter().zip(indices.iter()) {
+            let a_x = offset * omega.pow(indices.0);
+            let b_x = offset * omega.pow(indices.1);
+            proof.verify(a_x, b_x, alpha, indices, current_root, next_root)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub struct MerkleProof<F> {
     pub merkle_path: Vec<GenericArray<u8, U32>>,
     pub leaf: F,
-    pub idx: usize,
 }
 
 impl<F: FieldElement> MerkleProof<F> {
@@ -24,15 +54,23 @@ impl<F: FieldElement> MerkleProof<F> {
             return Err(MerkleError::InvalidLeaf);
         }
         let merkle_path = MerkleTree::open_preprocessed(idx, hashed_leaves)?;
-        Ok(Self {
-            merkle_path,
-            leaf,
-            idx,
-        })
+        Ok(Self { merkle_path, leaf })
     }
 
     pub fn root(&self) -> Option<&GenericArray<u8, U32>> {
         self.merkle_path.first()
+    }
+
+    pub fn verify(&self, root: &GenericArray<u8, U32>, idx: usize) -> Result<(), MerkleError> {
+        match MerkleTree::verify(
+            root.clone(),
+            idx,
+            &self.merkle_path,
+            &self.leaf.canon_serialize_to_vec(),
+        ) {
+            Ok(true) => Ok(()),
+            _ => Err(MerkleError::InvalidLeaf),
+        }
     }
 }
 
@@ -51,19 +89,36 @@ impl<F: FieldElement> ConsistencyProof<F> {
         Self { a, b, c }
     }
 
-    /// Verify the proof by
-    pub fn verify(&self, _current_root: &Evaluation<F>, _next_root: &Evaluation<F>) -> bool {
-        // check that b.idx = a.idx + current_codeword.len() / 2;
-
-        // Check each merkle proof verifies, using the same root for a and b
+    /// Verify the proof by checking the merkle roots and verifying that the
+    /// three points are colinear.
+    pub fn verify(
+        &self,
+        a_x: F,
+        b_x: F,
+        alpha: F,
+        indices: &(usize, usize, usize),
+        current_root: &GenericArray<u8, U32>,
+        next_root: &GenericArray<u8, U32>,
+    ) -> Result<(), FriError> {
+        let (a_idx, b_idx, c_idx) = indices;
+        // Check the merkle proofs
+        self.a.verify(current_root, *a_idx)?;
+        self.b.verify(current_root, *b_idx)?;
+        self.c.verify(next_root, *c_idx)?;
 
         // check that the points are colinear
-
-        todo!()
+        if !Polynomial::are_colinear(vec![
+            (a_x, self.a.leaf),
+            (b_x, self.b.leaf),
+            (alpha, self.c.leaf),
+        ]) {
+            return Err(FriError::NotColinear);
+        }
+        Ok(())
     }
 }
 
-impl<F: FieldElement> FriOpening<F> {
+impl<F: FieldElement> FriOpenings<F> {
     pub fn open(
         commitment: &FriCommitment<F>,
         at: &[usize],
@@ -88,7 +143,7 @@ impl<F: FieldElement> FriOpening<F> {
         current_codeword: &Evaluation<F>,
         next_codeword: &Evaluation<F>,
         indices: &[usize],
-    ) -> Result<Vec<ConsistencyProof<F>>, FriError> {
+    ) -> Result<FriRoundOpening<F>, FriError> {
         let b_offset = current_codeword.len() / 2;
         let mut consistency_proofs = Vec::with_capacity(indices.len());
 
@@ -105,6 +160,6 @@ impl<F: FieldElement> FriOpening<F> {
             ))
         }
 
-        Ok(consistency_proofs)
+        Ok(FriRoundOpening(consistency_proofs))
     }
 }

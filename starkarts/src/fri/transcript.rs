@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::{
-    field_elem::FieldElement, Evaluation, FriCommitment, FriOpening, MerkleError, MerkleTree,
+    field_elem::FieldElement, Evaluation, FriCommitment, FriOpenings, MerkleError, MerkleTree,
 };
 
 pub enum FriError {
@@ -10,6 +10,8 @@ pub enum FriError {
     NotPowerOfTwoSized,
     InvalidLeaf,
     TooManySamplesRequested,
+    InvalidCommitment,
+    NotColinear,
 }
 
 impl From<MerkleError> for FriError {
@@ -24,7 +26,7 @@ impl From<MerkleError> for FriError {
 #[derive(Debug)]
 pub struct FriProof<F> {
     pub commitment: FriCommitment<F>,
-    pub opening: FriOpening<F>,
+    pub openings: FriOpenings<F>,
 }
 
 pub struct Fri<F> {
@@ -65,23 +67,67 @@ impl<F: FieldElement> Fri<F> {
             FriCommitment::commit(codeword, self.num_rounds(), self.omega, self.offset);
 
         // Get random indices "from the verifier"
-        let indices = self.sample_indices(
-            &commitment.prover_fiat_shamir(),
-            codewords[1].len(),
-            codewords.last().expect("codewords must not be empty").len(),
-            self.num_colinearity_checks,
-        )?;
+        let indices =
+            self.determine_sample_indices(&commitment.fiat_shamir(), codewords[0].len())?;
 
-        let opening = FriOpening::open(&commitment, &indices, &codewords)?;
+        let openings = FriOpenings::open(&commitment, &indices, &codewords)?;
 
         Ok(FriProof {
             commitment,
-            opening,
+            openings,
         })
     }
 
     // TODO
-    pub fn verify() {}
+    pub fn verify(&self, proof: &FriProof<F>) -> Result<(), FriError> {
+        let num_rounds = self.num_rounds();
+        let commitment = &proof.commitment;
+        let openings = &proof.openings;
+        let final_codeword = &commitment.final_codeword;
+
+        // Verify that the final codeword is low degree
+        commitment.verify_final_codeword(
+            final_codeword.len() / self.expansion_factor,
+            self.omega.pow(2 * num_rounds),
+        )?;
+
+        // Compute the indices to check for colinearity
+        let indices = self.determine_sample_indices(&commitment.fiat_shamir(), self.domain_size)?;
+
+        // Verify that the prover has provided enough openings and roots.
+        // Without this check, we might not check every proof because of
+        // a Zip terminates when the first iterator runs out.
+        if commitment.merkle_roots.len() != openings.0.len() {
+            return Err(FriError::InvalidCommitment);
+        }
+        for (round, ([current_root, next_root], opening)) in commitment
+            .merkle_roots
+            .array_windows::<2>()
+            .zip(openings.0.iter())
+            .enumerate()
+        {
+            let round_indices: Vec<(usize, usize, usize)> = indices
+                .iter()
+                .map(|&idx| {
+                    let reduced_domain_len = self.domain_size >> round + 1;
+                    let a_idx = idx % reduced_domain_len;
+                    let b_idx = a_idx + reduced_domain_len;
+                    (a_idx, b_idx, a_idx)
+                })
+                .collect();
+            let alpha = F::sample(&commitment.partial_fiat_shamir(round));
+            opening.verify(
+                &round_indices,
+                alpha,
+                self.omega,
+                self.offset,
+                current_root,
+                next_root,
+            )?;
+        }
+
+        Ok(())
+    }
 
     #[inline]
     /// Read an index from the random bytes, reducing (mod size)
@@ -99,36 +145,39 @@ impl<F: FieldElement> Fri<F> {
         return Ok((raw_index % (size as u64)) as usize);
     }
 
-    /// Sample `num_samples` random indices from the provided seed
-    ///  using a cryptographic hash function
-    pub fn sample_indices(
+    /// Sample `self.num_colinearity_checks` random indices from the provided seed
+    /// using a cryptographic hash function. The returned indices are in the range
+    /// 0..length_of_original_codeword/2
+    pub fn determine_sample_indices(
         &self,
         seed: &[u8],
-        size: usize,
-        reduced_size: usize,
-        num_samples: usize,
+        length_of_original_codeword: usize,
     ) -> Result<Vec<usize>, FriError> {
-        if num_samples >= 2 * reduced_size {
-            return Err(FriError::TooManySamplesRequested);
-        }
-
-        let mut indices = Vec::with_capacity(num_samples);
-        let mut reduced_indices = Vec::with_capacity(num_samples);
+        let mut indices = Vec::with_capacity(self.num_colinearity_checks);
+        let mut reduced_indices = Vec::with_capacity(self.num_colinearity_checks);
 
         let mut sample_seed: Vec<u8> = Vec::with_capacity(seed.len() + 8);
         sample_seed.extend_from_slice(seed);
+
         let mut iter_number = 0;
-        while indices.len() < num_samples {
+
+        let max_index = length_of_original_codeword / 2;
+        let size_after_all_reductions = length_of_original_codeword >> self.num_rounds();
+
+        while indices.len() < self.num_colinearity_checks {
             // Append the sample number to the seed
             sample_seed
                 .write_u64::<LittleEndian>(iter_number)
                 .expect("write to vec must not fail");
 
-            // Use a hash function to generate a random number
-            let index = self.sample_index(&MerkleTree::hash(&sample_seed), size)?;
-            let reduced_index = index % reduced_size;
+            // Use a hash function to generate a random number, then reduce mod half the size of the initial codeword
+            // Recall that colinearity checks in FRI verify that current_codeword[i] and current_codeword[i + len/2] lie on a
+            // straight line with next_codeword[i]. Picking indices between 0 and len/2 guarantees that we can safey add len/2
+            // to each index without running out of bounds.
+            let index = self.sample_index(&MerkleTree::hash(&sample_seed), max_index)?;
+            let reduced_index = index % size_after_all_reductions;
 
-            // Verify that the number hasn't collided with another index
+            // Verify that the index doesn't collide even when reduced to work for the smallest codeword
             if !reduced_indices.contains(&reduced_index) {
                 reduced_indices.push(reduced_index);
                 indices.push(index);

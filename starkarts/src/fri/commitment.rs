@@ -4,7 +4,7 @@ use blake2::digest::{
 };
 use sha3::{Shake256, Shake256Core};
 
-use crate::{field_elem::FieldElement, CanonicalSer, Evaluation, MerkleTree};
+use crate::{field_elem::FieldElement, CanonicalSer, Evaluation, FriError, MerkleTree, Polynomial};
 
 #[derive(Debug)]
 /// An efficiently queryable commitment to a low degree polynomial.
@@ -69,9 +69,22 @@ impl<F: FieldElement> FriCommitment<F> {
         (proof, intermediate_codewords)
     }
 
-    pub fn prover_fiat_shamir(&self) -> [u8; 32] {
+    /// Compute the hash of the entire commitment
+    pub fn fiat_shamir(&self) -> [u8; 32] {
         let mut hasher = Shake256::default();
         self.fiat_shamir_update(&mut hasher);
+        let mut reader = hasher.finalize_xof();
+        let mut result = [0u8; 32];
+        reader.read(&mut result);
+        result
+    }
+
+    /// Compute the hash of the commitment up to (but not including) some index
+    pub fn partial_fiat_shamir(&self, up_to: usize) -> [u8; 32] {
+        let mut hasher = Shake256::default();
+        for root in self.merkle_roots.iter().take(up_to) {
+            hasher.update(&root[..]);
+        }
         let mut reader = hasher.finalize_xof();
         let mut result = [0u8; 32];
         reader.read(&mut result);
@@ -84,6 +97,53 @@ impl<F: FieldElement> FriCommitment<F> {
             hasher.update(&root[..]);
         }
         hasher.update(&self.final_codeword.canon_serialize_to_vec());
+    }
+
+    /// Verifies that the `final_codeword` is low degree and matches the merkle commitment
+    /// given the generator `omega` of the cyclic group which should have been used to compute the *final* codeword
+    /// and the expected degree
+    pub fn verify_final_codeword(
+        &self,
+        expected_degree: usize,
+        final_omega: F,
+    ) -> Result<(), FriError> {
+        // Verify that the final_codeword matches the last merkle root
+        match self.merkle_roots.last() {
+            Some(root) => {
+                if MerkleTree::commit_preprocessed(&self.final_codeword.merkle_preprocess())?[..]
+                    != root[..]
+                {
+                    return Err(FriError::InvalidCommitment);
+                }
+            }
+            None => {
+                return Err(FriError::InvalidCommitment);
+            }
+        }
+
+        // Verify that omega generates a cyclic subgroup with the correct order
+        let degree = self.final_codeword.len() + 1;
+        if final_omega.inverse() != final_omega.pow(degree) {
+            return Err(FriError::InvalidDomain);
+        }
+
+        // Compute the domain consisting of [omega^i for i in range 0..degree+1]
+        let mut domain = Vec::with_capacity(degree + 1);
+        let mut omega = final_omega;
+        for _ in 0..degree + 1 {
+            domain.push(omega);
+            omega = omega * final_omega;
+        }
+
+        // Interpolate a polynomial from the evaluations and verify its degree
+        let interpolated =
+            Polynomial::<F>::interpolate_domain(&domain, &self.final_codeword.evaluations)
+                .map_err(|_| FriError::InvalidDomain)?;
+        if interpolated.degree() > expected_degree as isize {
+            return Err(FriError::InvalidCommitment);
+        }
+
+        Ok(())
     }
 }
 

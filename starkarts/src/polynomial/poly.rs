@@ -126,10 +126,9 @@ where
         domain.into_iter().map(|p| self.evaluate(p)).collect()
     }
 
-    /// Use lagrange interpolation to create a polynomial from lists of X and Y coordinates
-    pub fn interpolate_domain<T: Into<F>>(
-        domain: Vec<T>,
-        values: Vec<T>,
+    pub fn interpolate_domain(
+        domain: &Vec<F>,
+        values: &Vec<F>,
     ) -> Result<Self, InterpolationError> {
         if domain.len() != values.len() {
             return Err(InterpolationError::MismatchedCoordinateLists);
@@ -137,24 +136,19 @@ where
         if domain.len() == 0 {
             return Err(InterpolationError::NoPointsProvided);
         }
-
-        let values: Vec<F> = values.into_iter().map(|v| v.into()).collect();
-        let domain: Vec<F> = domain.into_iter().map(|v| v.into()).collect();
-
         let x = Self::from(vec![F::zero(), F::one()]);
         let mut acc = Self::zero();
-        for (i, v_i) in values.into_iter().enumerate() {
+        for (i, &v_i) in values.iter().enumerate() {
             let mut product = Polynomial::from(vec![v_i]);
-            for (j, d_j) in domain.iter().enumerate() {
+            for (j, &d_j) in domain.iter().enumerate() {
                 if j == i {
                     continue;
                 }
                 product = product
-                    * (x.clone() - Polynomial::from(vec![*d_j]))
-                    * Polynomial::from(vec![(domain[i] - *d_j).inverse()]);
+                    * (x.clone() - Polynomial::from(vec![d_j]))
+                    * Polynomial::from(vec![(domain[i] - d_j).inverse()]);
             }
             acc += product;
-            dbg!(&acc);
         }
         Ok(acc)
     }
@@ -204,7 +198,7 @@ where
             domain.push(x);
             range.push(y);
         }
-        Self::interpolate_domain(domain, range)
+        Self::interpolate_domain(&domain, &range)
             .expect("Provided the same number of x and y coordinates")
             .degree()
             == 1
@@ -468,7 +462,7 @@ mod tests {
         let values: Vec<GoldilocksElement> = values.iter().map(|v| (*v).into()).collect();
 
         let p: Polynomial<GoldilocksElement> =
-            Polynomial::interpolate_domain(domain, values).expect("Polynomial must interpolate");
+            Polynomial::interpolate_domain(&domain, &values).expect("Polynomial must interpolate");
         dbg!(&p);
         assert_eq!(p.evaluate(35), 44067)
     }
@@ -481,7 +475,7 @@ mod tests {
         let values: Vec<GoldilocksElement> = values.iter().map(|v| (*v).into()).collect();
 
         let p: Polynomial<GoldilocksElement> =
-            Polynomial::interpolate_domain(domain, values).expect("Polynomial must interpolate");
+            Polynomial::interpolate_domain(&domain, &values).expect("Polynomial must interpolate");
         dbg!(&p);
         assert_eq!(p.evaluate(35), 1226)
     }
