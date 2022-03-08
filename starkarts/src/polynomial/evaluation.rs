@@ -20,14 +20,15 @@ impl<F: FieldElement> Evaluation<F> {
     /// 1. alpha: a random number
     /// 1. omega: a generator of a cyclic group with N elements where N is the number of points in the codeword
     /// 1. offset: a random number between 1 and N
+    ///
+    /// TODO: Test!!!
     pub fn split_and_fold(&self, alpha: F, omega: F, offset: F) -> Self {
         let mut output = Self {
             evaluations: Vec::with_capacity((self.evaluations.len() + 1) / 2),
         };
-        let one = F::one();
         let two: F = 2.into();
         let one_half = two.inverse();
-        let mut omega_acc = omega * offset * one_half;
+        let mut omega_acc = omega * offset * two;
         let midpoint = self.evaluations.len() / 2;
         // Because omega is a cyclic group with order N, omega ^ N = 1
         // Thus (omega ^ (N^2)) ^ 2 = 1, so omega ^ (N^2) is the square root of 1.
@@ -43,8 +44,8 @@ impl<F: FieldElement> Evaluation<F> {
 
         for (&pos, &neg) in positive_iter.zip(negative_iter) {
             let a_over_o = alpha / omega_acc;
-            let left = pos * (one + a_over_o);
-            let right = neg * (one - a_over_o);
+            let left = pos * (one_half + a_over_o);
+            let right = neg * (one_half - a_over_o);
             output.evaluations.push(left + right);
             omega_acc = omega_acc * omega;
         }
