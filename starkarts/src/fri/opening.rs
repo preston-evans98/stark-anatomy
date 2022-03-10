@@ -15,6 +15,9 @@ pub struct FriRoundOpening<F>(pub Vec<ConsistencyProof<F>>);
 
 impl<F: FieldElement> FriRoundOpening<F> {
     // TODO: double check
+    /// Verifies a single round of FRI. In other words, verifies that two merkle roots `current` and `next`
+    /// both commit to polynomials, and that `next` is related to `current` by the FRI equation.
+
     pub fn verify(
         &self,
         indices: &[(usize, usize, usize)],
